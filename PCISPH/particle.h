@@ -3,7 +3,8 @@
 #include<glm/glm.hpp>
 
 
-struct Particle {
+class Particle {
+public:
 	unsigned int cellIdx;
 
 	glm::vec3 vel;
@@ -27,4 +28,9 @@ struct Particle {
 		density = 0.0f;
 	}
 
+};
+
+struct State {
+	glm::vec3 vel;
+	glm::vec3 pos;
 };
