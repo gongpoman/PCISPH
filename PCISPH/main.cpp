@@ -14,6 +14,32 @@
 #include"model.h"
 #include "particle.h"
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TODO 1. 다른 힘 구현하기.
+// TODO 3. boundary 파티클 박아서 할 수 없으니까. neighborsearch할 때 쓱 넣어줘서 particle 박아서 한 것 같은 방식으로 구현하기.
+// ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+// 고려할 것.
+// 1. 지금 반사시키는거 버전 2개있음.
+// 2. particle 정렬하는거 pred, actual version 두개 있음.
+// 3. pressure force 구할 때 density 어떤거로 나눠줄 지 그것도 약간 다르게 할 수 있음. 
+// 4. TODO 4번 하면 neighbor search 버전도 달라질거임. 그리고 반사시키는거 안쓰게 되겠지.... 이말은?
+//  PCIupdateParticle 이 함수 자체를 바꿔줘야 할 수도 있다는 말. 여기서 반사시키니까. ㅇㅇ
+// 5. 여러가지 상수들, 커널 반지름부터, 뭐 그냥 개많잖아 그런거 하나 세팅달라지면 또 바뀔 수 있음.
+// 
+// 
+// 방식의 조합.
+// 
+// 1. 반사( 1-1 conti, 1-2그냥.) or 2 particle.
+// 
+// 2. particle정렬할 때 pred/ actual 기준.
+// 
+// 3. pressure force구할 때 rest로 나눌지, 각각의 density로 나눌지.
+// 
+// 지금 3번은 완전히 구현 된거고.
+// 
+//
+// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 void processInput(GLFWwindow* window);
@@ -33,10 +59,13 @@ void __cubeBoundaryCellIdxPred();
 glm::ivec3 __cubeCellCoord(glm::vec3 pos);
 unsigned int __cubeMorton(int x, int y, int z);
 inline uint64_t mortonEncode_LUT(unsigned int x, unsigned int y, unsigned int z);
-void outBoundarySolution(Particle*);
+
+void predoutBoundarySolution(Particle*);
+void predoutBoundarySolutionConti(Particle*);
 
 
 // TODO 안쓰이는거 지우기.
+float calcPredDensity(unsigned int particleIdx);
 float calcDensity(unsigned int particleIdx);
 float calcDelta(unsigned int particleIdx);
 glm::vec3 forcePressureSpiky(unsigned int particleIdx);
@@ -48,24 +77,26 @@ unsigned int __nthDigit(unsigned int nGridDivisoin);
 
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
-Camera cam(glm::vec3(3.0f, 3.0f, 3.0f));
+Camera cam(glm::vec3(0.0f, 1.0f, 4.0f));
 
 float lastX, lastY;
 bool isFirstMove = true;
 
 
-extern const float deltaTime = 1/60.0f;
-const unsigned int numParticle = 20*20*20;
-const float sideLen = 1.0f;
-const glm::vec3 acc_g = glm::vec3(0.0f,-9.8f,0.0f);
+extern constexpr float deltaTime = 1/180.0f;
+constexpr unsigned int numParticle = 22*22*22;
 
-const float restDensity = 997.0f;
-const float radius = 0.025f;
-const float particleMass = restDensity * 4.0f / 3.0f * 3.141592f * radius * radius * radius;
-const float coreRad = 0.025f * 4.0f; //  (= grid side length, h )
+constexpr glm::vec3 acc_g = glm::vec3(0.0f,-9.8f,0.0f);
 
-const float linearVisc = 0.25f;
-const float quadVisc = .5f;
+constexpr float restDensity = 997.0f;
+constexpr float radius = 0.025f;
+constexpr float particleMass = restDensity * 4.0f / 3.0f * 3.141592f * radius * radius * radius;
+constexpr float coreRad = radius * 5.0f; //  (= grid side length, h )
+
+const float sideLen = std::pow(numParticle * particleMass / restDensity,1.0f/3.0f);
+
+constexpr float linearVisc = 0.25f;
+constexpr float quadVisc = .5f;
 
 
 
@@ -78,15 +109,15 @@ std::vector<Particle>* neighbors;
 
 
 // 정육면체 grid 가정함.
-const float cubicBoundaryLen = 4.0f;
-unsigned int nGridDivisoin = (unsigned int)(cubicBoundaryLen / coreRad);
+constexpr float cubicBoundaryLen = 4.0f;
+constexpr unsigned int nGridDivisoin = (unsigned int)(cubicBoundaryLen / coreRad);
 unsigned int upperNGridDiv;
 
 
 // predict - correct
-const float eta = 0.01f; // error
-const unsigned int minIter = 3;
-const unsigned int maxIter = 50;
+constexpr float eta = 0.01f; 
+constexpr unsigned int minIter = 0;
+constexpr unsigned int maxIter = 25;
 
 
 int main()
@@ -124,16 +155,14 @@ int main()
 
 
     //Sphere render setting
-
     Shader particleShader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
     Model sphere("resources/objects/sphere.obj");
 
     particleShader.use();
-    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f), cam.up);
+    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f,0.5f,0.0f), cam.up);
     glm::mat4 projMat = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(particleShader.ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(particleShader.ID, "proj"), 1, GL_FALSE, &projMat[0][0]);
-    
     glUniform3f(glGetUniformLocation(particleShader.ID, "lightPos"), cam.position.x, cam.position.y, cam.position.z);
     glUseProgram(0);
 
@@ -173,27 +202,8 @@ int main()
     upperNGridDiv = std::pow(2,__nthDigit(nGridDivisoin));
     neighborIdices = new std::vector<unsigned int>[upperNGridDiv*upperNGridDiv*upperNGridDiv]; // nGridDiv^3 만큼이 아니라. nGridDiv의 2진수형태의 올림만큼 잡아야 됨. ngriddiv= 27 -> 32^3개 잡아야 됨.
     gridInit(neighborIdices);
-
     neighbors = new std::vector<Particle>();
 
-
-    /*/grid test==============================================================================================================================================================================
-    std::cout << nGridDivisoin * nGridDivisoin * nGridDivisoin << std::endl;
-        for (unsigned int i = 0; i < nGridDivisoin; i++) {
-            for (unsigned int j = 0; j < nGridDivisoin; j++) {
-                for (unsigned int k = 0; k < nGridDivisoin; k++) {
-
-                    unsigned int cellIDX = __cubeMorton(i, j, k);
-                    std::cout << "cellIdx : " << i<< " , " << j << " , " << k << " : " << cellIDX;
-                    std::cout << std::endl;
-                }
-            }
-        }
-
-    system("PAUSE"); 
-
-    //==============================================================================================================================================================================
-    */
 
     while (!glfwWindowShouldClose(window))
     {
@@ -224,7 +234,7 @@ int main()
         std::cout << "loop end =====================================================================================================================" << std::endl;
 
         for (unsigned int i = 0; i < numParticle; i++) {
-            if (particles[i].pos.y > 2.0f)
+            if (particles[i].pos.y > 3.0f)
                 std::cout << i<<" : "<<particles[i].pos.y << std::endl;
         }
     }
@@ -233,39 +243,11 @@ int main()
     delete[] instWorlds;
     delete neighbors;
 
-    std::cout << frame << std::endl;
+    std::cout << frame <<"frames rendered" << std::endl;
     glfwTerminate();
     return 0;
 }
 
-
-
-glm::vec3 forceVis(unsigned int particleIdx) { //TODO linear Visc, quadVisc, kernel 조절하기.
-
-    const float kernelConst = 2.0f / (coreRad * coreRad * coreRad * 1.772454f); // root pi = 1.7724538...
-
-    Particle target = particles[particleIdx];
-    glm::vec3 netForceVis = glm::vec3(0);
-
-    for (auto iter = neighbors->begin(); iter != neighbors->end(); iter++) {
-        glm::vec3 dist = ((*iter).pos - target.pos);
-        float distLen = glm::length(dist);
-
-        float distRatio = distLen / coreRad;
-
-        float mu = glm::dot((*iter).vel - target.vel, dist);
-
-        if (mu < FLT_EPSILON && distLen - coreRad < FLT_EPSILON) {
-            float pipi = 0;
-            mu /= (0.01f * coreRad + distLen * distRatio);
-            pipi = -linearVisc * mu + quadVisc * mu * mu;
-            pipi /= restDensity;
-            glm::vec3 grad_Wvis =  pipi * dist * kernelConst / std::pow(2.718282f, distRatio);
-            netForceVis -= grad_Wvis;
-        }
-    }
-    return netForceVis; // TODO
-}
 
 
 glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
@@ -281,11 +263,24 @@ glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
 
         if (distLen - coreRad < FLT_EPSILON && distLen>FLT_EPSILON) {
             glm::vec3 grad_Wp = glm::normalize(dist);
-            
+
+            if (glm::length(grad_Wp) > 10000000000000000000.0f) {
+                std::cout << "1. " << glm::length(grad_Wp) << std::endl;
+                system("PAUSE");
+            }
+
             grad_Wp *= (coreRad - distLen) * (coreRad - distLen) * 3.0f * kernelConst;
-            
+            if (glm::length(grad_Wp) > 10000000000000000000.0f){
+                std::cout << "2. " << glm::length(grad_Wp) << std::endl;
+               system("PAUSE");
+            }
             //grad_Wp *= particleMass * particleMass * ((*iter).pressure / (*iter).density / (*iter).density + particles[particleIdx].pressure / particles[particleIdx].density / particles[particleIdx].density);
             grad_Wp *= particleMass * particleMass * ((*iter).pressure + particles[particleIdx].pressure) / restDensity / restDensity;
+
+            if(glm::length(grad_Wp)> 10000000000000000000.0f){
+                std::cout << "3. " << (*iter).pressure<< " : "<<particles[particleIdx].pressure << std::endl;
+                system("PAUSE");
+            }
 
             netForceP -= grad_Wp;
         }
@@ -325,22 +320,18 @@ float calcDelta(unsigned int particleIdx) {
 
     return beta;
 }
-
-float calcDensity(unsigned int particleIdx) {
+float calcPredDensity(unsigned int particleIdx) {
 
     const glm::vec3 pos = particles[particleIdx].px;
     const float coreRad2 = coreRad * coreRad;
 
     float sum = 0;
 
-    int temp = 0;
 
     for (auto iter = neighbors->begin(); iter != neighbors->end(); iter++) {
 
-        //TO TEST
         float len = glm::length(pos - (*iter).px);
         if (len - coreRad < FLT_EPSILON) {
-            temp++;
             len = std::pow((coreRad2 - len * len), 3.0f);
             sum += len;
         }
@@ -351,61 +342,26 @@ float calcDensity(unsigned int particleIdx) {
 
     return sum;
 }
+float calcDensity(unsigned int particleIdx) {
 
-glm::vec3 forceSurfaceTension(unsigned int particleIdx) {
-    return glm::vec3(0);
+    const glm::vec3 pos = particles[particleIdx].pos;
+    const float coreRad2 = coreRad * coreRad;
+    float sum = 0;
+
+    for (auto iter = neighbors->begin(); iter != neighbors->end(); iter++) {
+
+        float len = glm::length(pos - (*iter).pos);
+        if (len - coreRad < FLT_EPSILON) {
+            len = std::pow((coreRad2 - len * len), 3.0f);
+            sum += len;
+        }
+    }
+
+    sum *= 1.566682f / std::pow(coreRad, 9);// 315.0f / 64.0f / 3.141592f = 1.5666817...;
+    sum *= particleMass;
+
+    return sum;
 }
-
-glm::ivec3 __cubeCellCoord(glm::vec3 pos) {
-
-    float x = ((pos.x + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
-    float y = (pos.y / cubicBoundaryLen * nGridDivisoin);
-    float z = ((pos.z + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
-
-    x = (x + FLT_EPSILON <= 0) ? -1.0f : x;
-    z = (z + FLT_EPSILON <= 0) ? -1.0f : z;
-    y = (pos.y + FLT_EPSILON <= 0) ? -1.0f : y;
-
-    return glm::ivec3((int)x, (int)y, (int)z);
-}
-
-void outBoundarySolution(Particle* particle) {
-    glm::ivec3 cellIdx = __cubeCellCoord(particle->pos);
-    glm::ivec3 flag;
-
-    flag.x = (cellIdx.x == -1) ? -1 : (cellIdx.x >= nGridDivisoin) ? 1 : 0;
-    flag.z = (cellIdx.z == -1) ? -1 : (cellIdx.z >= nGridDivisoin) ? 1 : 0;
-    flag.y = (cellIdx.y == -1) ? -1 : (cellIdx.y >= nGridDivisoin) ? 1 : 0;
-
-
-    if (flag.x == -1) {
-        particle->vel.x *= -1;
-        particle->pos.x += 2*(-cubicBoundaryLen / 2.0f - particle->pos.x);
-    }
-    if (flag.x == 1) {
-        particle->vel.x *= -1;
-        particle->pos.x += 2 * (cubicBoundaryLen / 2.0f - particle->pos.x);
-    }
-
-    if (flag.z == -1) {
-        particle->vel.z *= -1;
-        particle->pos.z += 2 * (-cubicBoundaryLen / 2.0f - particle->pos.z);
-    }
-    if (flag.z == 1) {
-        particle->vel.z *= -1;
-        particle->pos.z += 2 * (cubicBoundaryLen / 2.0f - particle->pos.z);
-    }
-
-    if (flag.y == -1) {
-        particle->vel.y *= -0.999f ;
-        particle->pos.y = - particle->pos.y;
-    }
-    if (flag.y == 1) {
-        particle->vel.y *= -1;
-        particle->pos.y += 2 * (+ cubicBoundaryLen - particle->pos.y);
-    }
-}
-
 
 void predoutBoundarySolution(Particle* particle) {
     glm::ivec3 cellIdx = __cubeCellCoord(particle->px);
@@ -421,29 +377,204 @@ void predoutBoundarySolution(Particle* particle) {
         particle->px.x += 2 * (-cubicBoundaryLen / 2.0f - particle->px.x);
     }
     if (flag.x == 1) {
-         particle->pv.x *= -1;
-         particle->px.x += 2 * (cubicBoundaryLen / 2.0f - particle->px.x);
+        particle->pv.x *= -1;
+        particle->px.x += 2 * (cubicBoundaryLen / 2.0f - particle->px.x);
     }
 
     if (flag.z == -1) {
-         particle->pv.z *= -1;
-         particle->px.z += 2 * (-cubicBoundaryLen / 2.0f - particle->px.z);
+        particle->pv.z *= -1;
+        particle->px.z += 2 * (-cubicBoundaryLen / 2.0f - particle->px.z);
     }
     if (flag.z == 1) {
-         particle->pv.z *= -1;
-         particle->px.z += 2 * (cubicBoundaryLen / 2.0f - particle->px.z);
+        particle->pv.z *= -1;
+        particle->px.z += 2 * (cubicBoundaryLen / 2.0f - particle->px.z);
     }
 
     if (flag.y == -1) {
-         particle->pv.y *= -0.999f;
-         particle->px.y = -(particle->px.y);
+        particle->pv.y *= -0.999f;
+        particle->px.y = -(particle->px.y);
     }
     if (flag.y == 1) {
-         particle->pv.y *= -1;
-         particle->px.y += 2 * (+cubicBoundaryLen - particle->px.y);
+        particle->pv.y *= -1;
+        particle->px.y += 2 * (+cubicBoundaryLen - particle->px.y);
+    }
+}
+void predoutBoundarySolutionConti(Particle* particle) {
+    glm::ivec3 cellIdx = __cubeCellCoord(particle->px);
+    glm::ivec3 flag;
+
+    flag.x = (cellIdx.x == -1) ? -1 : (cellIdx.x >= nGridDivisoin) ? 1 : 0;
+    flag.z = (cellIdx.z == -1) ? -1 : (cellIdx.z >= nGridDivisoin) ? 1 : 0;
+    flag.y = (cellIdx.y == -1) ? -1 : (cellIdx.y >= nGridDivisoin) ? 1 : 0;
+
+
+    if (flag.x == -1) {
+        particle->pv.x *= -1;
+        particle->px.x += 2 * (-cubicBoundaryLen / 2.0f - particle->px.x);
+    }
+    if (flag.x == 1) {
+        particle->pv.x *= -1;
+        particle->px.x += 2 * (cubicBoundaryLen / 2.0f - particle->px.x);
+    }
+
+    if (flag.z == -1) {
+        particle->pv.z *= -1;
+        particle->px.z += 2 * (-cubicBoundaryLen / 2.0f - particle->px.z);
+    }
+    if (flag.z == 1) {
+        particle->pv.z *= -1;
+        particle->px.z += 2 * (cubicBoundaryLen / 2.0f - particle->px.z);
+    }
+
+    if (flag.y == -1) {
+
+        float acc = (particle->force_ext.y + particle->force_p.y + particle->force_vis.y) / particleMass + acc_g.y; // acc of axis
+        float dt1 =  -particle->pv.y / acc;
+        dt1 = dt1 + sqrt(dt1 * dt1 - 2.0f * particle->pos.y / acc);
+        
+        float maxSpeed = -(particle->pv.y + acc * dt1);
+        float period =  -2.0f * maxSpeed / acc;
+
+        float updateTime = ((deltaTime - dt1) / period - (unsigned int)((deltaTime - dt1) / period)) * period;
+
+        //TODO validaion 조금 더 생각해보자 검산 조금 더 해봐 
+        //std::cout << dt1 <<  " : " << updateTime << " : "<< particle->force_p.y<< " : " << acc << " : " << maxSpeed * updateTime + 0.5f * acc * updateTime * updateTime << std::endl;
+
+        particle->px.y = maxSpeed * updateTime + 0.5f * acc * updateTime * updateTime;
+        particle->px.y = (particle->px.y <FLT_EPSILON) ? 0.0f : (particle->px.y);
+        particle->pv.y = maxSpeed + acc * updateTime;
+
+
+    }
+    if (flag.y == 1) {
+        particle->pv.y *= -1;
+        particle->px.y += 2 * (+cubicBoundaryLen - particle->px.y);
     }
 }
 
+void neighborSearch(std::vector<Particle>* neighbors, unsigned int idx) {
+
+    for (unsigned int i = 0; i < neighborIdices[particles[idx].cellIdx].size(); i++) {
+        unsigned int cidx = neighborIdices[particles[idx].cellIdx][i];
+        if (idxMap.count(cidx) != 0) {
+            cidx = idxMap[cidx];
+            unsigned int startPoint = (cidx == 0) ? 0 : mortonCount[cidx - 1];
+            unsigned int endPoint = mortonCount[cidx];
+
+            for (unsigned int j = startPoint; j < endPoint; j++) {
+                neighbors->push_back(particles[j]);
+            }
+        }
+    }
+}
+
+
+void PCIupdateParticles() {
+
+    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+        particles[particleIdx].pressure = 0.0f;
+        particles[particleIdx].force_p = glm::vec3(0);
+    }
+
+    __cubeBoundaryCellIdx();
+    unsigned int currentCellIdx = -1;
+    unsigned int prevCellIdx = -1;
+    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+
+        currentCellIdx = particles[particleIdx].cellIdx;
+        if (prevCellIdx != currentCellIdx) {
+            neighbors->clear();
+            neighborSearch(neighbors, particleIdx);
+        }
+        particles[particleIdx].force_vis = glm::vec3(0);
+        particles[particleIdx].force_ext = glm::vec3(0);
+        prevCellIdx = currentCellIdx;
+    }
+
+
+    bool densityOverFlag = true;
+    unsigned int iteration = 0;
+
+
+    while ((iteration < minIter || densityOverFlag) && iteration < maxIter) {
+        int largerParticleNum = 0;
+        densityOverFlag = false;
+
+        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+            particles[particleIdx].pv = particles[particleIdx].vel + ((particles[particleIdx].force_p + particles[particleIdx].force_vis) / particleMass + acc_g) * deltaTime;
+            particles[particleIdx].px = particles[particleIdx].pos + particles[particleIdx].pv * deltaTime;
+            predoutBoundarySolutionConti(&particles[particleIdx]);
+        }
+
+        __cubeBoundaryCellIdxPred();
+        prevCellIdx = -1;
+        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+
+            currentCellIdx = particles[particleIdx].cellIdx;
+            if (prevCellIdx != currentCellIdx) {
+                neighbors->clear();
+                neighborSearch(neighbors, particleIdx);
+            }
+
+            particles[particleIdx].density = calcPredDensity(particleIdx);
+
+            particles[particleIdx].densityVar = (particles[particleIdx].density - restDensity >= 0) ? particles[particleIdx].density - restDensity : 0.0f;
+
+            if ((particles[particleIdx].densityVar / restDensity) > eta) {
+                largerParticleNum++;
+                densityOverFlag = true;
+                particles[particleIdx].pressure += particles[particleIdx].densityVar * calcDelta(particleIdx);
+            }
+
+            prevCellIdx = currentCellIdx;
+        }
+
+        __cubeBoundaryCellIdx();
+
+        prevCellIdx = -1;
+        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+
+            currentCellIdx = particles[particleIdx].cellIdx;
+            if (prevCellIdx != currentCellIdx) {
+                neighbors->clear();
+                neighborSearch(neighbors, particleIdx);
+            }
+            particles[particleIdx].density = calcDensity(particleIdx);
+            prevCellIdx = currentCellIdx;
+        }
+
+        prevCellIdx = -1;
+        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+
+            currentCellIdx = particles[particleIdx].cellIdx;
+            if (prevCellIdx != currentCellIdx) {
+                neighbors->clear();
+                neighborSearch(neighbors, particleIdx);
+            }
+            particles[particleIdx].force_p = forcePressureSpiky(particleIdx);
+
+            prevCellIdx = currentCellIdx;
+        }
+
+        std::cout << "============================================================larger part : " << largerParticleNum << std::endl;
+        iteration++;
+    }
+
+    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
+        particles[particleIdx].vel = particles[particleIdx].pv;
+        particles[particleIdx].pos = particles[particleIdx].px;
+    }
+
+    std::cout << iteration << std::endl;
+
+}
+
+
+
+
+
+
+//=============================================================== 아마 다 구현 되지 않았을까...
 void __cubeBoundaryCellIdx() {          // z indexing.에 맞도록 정렬을 하고, 정렬된 particles array에서 어느 idx부터 어디까지가 어떤 cellIdx를 가지는 particle인지 다 저장해 놓는 코드.
 
     mortonCount.clear(); // 어느 idx부터 d어느 idx까지.
@@ -462,7 +593,7 @@ void __cubeBoundaryCellIdx() {          // z indexing.에 맞도록 정렬을 하고, 정�
 
         if (particles[i].cellIdx == (unsigned int)(-1)) {
             outBoundardyCount++;
-            std::cout << i<<"th particle" << std::endl;
+            std::cout << i << "th particle" << std::endl;
             std::cout << particles[i].pos.x << " : " << particles[i].pos.y << " : " << particles[i].pos.z << std::endl;
             std::cout << particles[i].vel.x << " : " << particles[i].vel.y << " : " << particles[i].vel.z << std::endl;
         }
@@ -508,12 +639,11 @@ void __cubeBoundaryCellIdx() {          // z indexing.에 맞도록 정렬을 하고, 정�
         }
     }
 }
+void __cubeBoundaryCellIdxPred() { //predicted position 기준으로 정렬
 
-void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고, 정렬된 particles array에서 어느 idx부터 어디까지가 어떤 cellIdx를 가지는 particle인지 다 저장해 놓는 코드.
+    mortonCount.clear();
 
-    mortonCount.clear(); // 어느 idx부터 d어느 idx까지.
-
-    unsigned int* mortonCounter = new unsigned[upperNGridDiv* upperNGridDiv* upperNGridDiv]; // temp
+    unsigned int* mortonCounter = new unsigned[upperNGridDiv * upperNGridDiv * upperNGridDiv]; 
     unsigned int outBoundardyCount = 0;
 
     for (unsigned int i = 0; i < upperNGridDiv * upperNGridDiv * upperNGridDiv; i++)
@@ -533,37 +663,37 @@ void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고,
         }
         else
             mortonCounter[particles[i].cellIdx]++;
-        
+
     }
 
     if (outBoundardyCount > 0) {
-        std::cout << "out boundary particle : "<< outBoundardyCount << std::endl;
+        std::cout << "out boundary particle : " << outBoundardyCount << std::endl;
         system("PAUSE");
     }
 
     unsigned int invIdx = 0;
-    
+
     idxMap.clear();
 
     for (unsigned int i = 0; i < upperNGridDiv * upperNGridDiv * upperNGridDiv; i++)
         if (mortonCounter[i] > 0) {
             mortonCount.push_back(mortonCounter[i]);
-            idxMap.insert(std::pair<unsigned int, unsigned int>(i, invIdx++));              // morton code cell index를 넣어주면. 그 cell idx가 morton counter의 몇번째 index인지를 저장하는 map  
+            idxMap.insert(std::pair<unsigned int, unsigned int>(i, invIdx++));            
         }
 
     delete[] mortonCounter;
 
 
-    for (auto iter = mortonCount.begin()+1; iter != mortonCount.end(); iter++) 
+    for (auto iter = mortonCount.begin() + 1; iter != mortonCount.end(); iter++)
         *(iter) += *(iter - 1);
 
     std::vector<std::vector<Particle>> tempParticles;
-    for (unsigned int i = 0; i < mortonCount.size(); i++) 
+    for (unsigned int i = 0; i < mortonCount.size(); i++)
         tempParticles.push_back(std::vector<Particle>());
 
     for (unsigned int i = 0; i < numParticle; i++) {
         unsigned int idx = idxMap[particles[i].cellIdx];
-        tempParticles[idx].push_back(particles[i]);   
+        tempParticles[idx].push_back(particles[i]);
     }
 
     unsigned int i = 0;
@@ -572,23 +702,6 @@ void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고,
             particles[i++] = *iteriter;
         }
     }
-}
-
-void neighborSearch(std::vector<Particle>* neighbors, unsigned int idx) {
-
-    for (unsigned int i = 0; i < neighborIdices[particles[idx].cellIdx].size(); i++) {
-        unsigned int cidx = neighborIdices[particles[idx].cellIdx][i];
-        if (idxMap.count(cidx) != 0) {
-            cidx = idxMap[cidx];
-            unsigned int startPoint = (cidx==0)? 0:mortonCount[cidx-1];
-            unsigned int endPoint =  mortonCount[cidx];
-
-            for (unsigned int j = startPoint; j < endPoint; j++) {
-                neighbors->push_back(particles[j]);
-            }
-        }
-    }
-
 }
 
 void gridInit(std::vector<unsigned int>* indices) {
@@ -616,7 +729,50 @@ void gridInit(std::vector<unsigned int>* indices) {
         }
     }
 }
+void particleInit(int mode) {
 
+    particles = new Particle[numParticle];
+
+    if (mode == 0) {
+        int numRow = pow(numParticle, 1 / 3.0f);
+
+
+        for (unsigned int i = 0; i < numRow; i++) {
+            for (unsigned int j = 0; j < numRow; j++) {
+                for (unsigned int k = 0; k < numRow; k++) {
+
+                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(sideLen / 2.0f - sideLen * (i / (float)numRow)
+                        , sideLen - sideLen * (j / (float)numRow)
+                        , sideLen / 2.0f - sideLen * (k / (float)numRow));
+                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
+
+                }
+            }
+        }
+    }
+    if (mode == 1) {
+        int numRow = pow(numParticle, 1 / 3.0f);
+
+        for (unsigned int i = 0; i < numRow; i++) {
+            for (unsigned int j = 0; j < numRow; j++) {
+                for (unsigned int k = 0; k < numRow; k++) {
+
+                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(-sideLen * (i / (float)numRow) - 0.39f
+                        , sideLen - sideLen * (j / (float)numRow)
+                        , -sideLen * (k / (float)numRow) - 0.39f);
+                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
+
+                }
+            }
+        }
+    }
+}
+void instanceMat(glm::mat4* instWorlds) {
+    for (unsigned int i = 0; i < numParticle; i++) {
+        instWorlds[i] = glm::translate(glm::mat4(1.0f), particles[i].pos);
+        instWorlds[i] = glm::scale(instWorlds[i], glm::vec3(0.03f));
+    }
+}
 unsigned int __cubeMorton(int x, int y, int z) {
     x = (x > -FLT_EPSILON) ? x : -1;
     y = (y > -FLT_EPSILON) ? y : -1;
@@ -628,6 +784,20 @@ unsigned int __cubeMorton(int x, int y, int z) {
 
     return  mortonEncode_LUT(x, y, z);
 }
+glm::ivec3 __cubeCellCoord(glm::vec3 pos) {
+
+    float x = ((pos.x + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
+    float y = (pos.y / cubicBoundaryLen * nGridDivisoin);
+    float z = ((pos.z + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
+
+    x = (x + FLT_EPSILON <= 0) ? -1.0f : x;
+    z = (z + FLT_EPSILON <= 0) ? -1.0f : z;
+    y = (pos.y + FLT_EPSILON <= 0) ? -1.0f : y;
+
+    return glm::ivec3((int)x, (int)y, (int)z);
+}
+
+
 
 void __mapBuffer(unsigned int& vbo, void* data, unsigned int size) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -672,52 +842,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     cam.processMouseScroll(yoffset);
 }
-
-void particleInit(int mode) {
-
-    particles = new Particle[numParticle];
-
-    if (mode == 0) {
-        int numRow = pow(numParticle, 1 / 3.0f);
-
-
-        for (unsigned int i = 0; i < numRow; i++) {
-            for (unsigned int j = 0; j < numRow; j++) {
-                for (unsigned int k = 0; k < numRow; k++) {
-
-                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(sideLen / 2.0f - sideLen * (i / (float)numRow)
-                        , sideLen - sideLen * (j / (float)numRow)
-                        , sideLen / 2.0f - sideLen * (k / (float)numRow));
-                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
-
-                }
-            }
-        }
-    }
-    if (mode == 1) {
-        int numRow = pow(numParticle, 1 / 3.0f);
-
-        for (unsigned int i = 0; i < numRow; i++) {
-            for (unsigned int j = 0; j < numRow; j++) {
-                for (unsigned int k = 0; k < numRow; k++) {
-
-                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(- sideLen * (i / (float)numRow) - 0.39f
-                        , sideLen - sideLen * (j / (float)numRow)
-                        , - sideLen * (k / (float)numRow) - 0.39f);
-                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
-
-                }
-            }
-        }
-    }
-}
-void instanceMat(glm::mat4* instWorlds) {
-    for (unsigned int i = 0; i < numParticle; i++) {
-        instWorlds[i] = glm::translate(glm::mat4(1.0f), particles[i].pos);
-        instWorlds[i] = glm::scale(instWorlds[i], glm::vec3(0.03f));
-    }
-}
-
 
 static const uint32_t morton256_x[256] =
 {
@@ -857,106 +981,36 @@ unsigned int __nthDigit(unsigned int nGridDivisoin) {
 
 
 
-void PCIupdateParticles() {
 
-    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-        particles[particleIdx].pressure = 0.0f;
-        particles[particleIdx].force_p = glm::vec3(0);
+//================= other forces
+
+glm::vec3 forceVis(unsigned int particleIdx) { 
+
+    const float kernelConst = 2.0f / (coreRad * coreRad * coreRad * 1.772454f); // root pi = 1.7724538...
+
+    Particle target = particles[particleIdx];
+    glm::vec3 netForceVis = glm::vec3(0);
+
+    for (auto iter = neighbors->begin(); iter != neighbors->end(); iter++) {
+        glm::vec3 dist = ((*iter).pos - target.pos);
+        float distLen = glm::length(dist);
+
+        float distRatio = distLen / coreRad;
+
+        float mu = glm::dot((*iter).vel - target.vel, dist);
+
+        if (mu < FLT_EPSILON && distLen - coreRad < FLT_EPSILON) {
+            float pipi = 0;
+            mu /= (0.01f * coreRad + distLen * distRatio);
+            pipi = -linearVisc * mu + quadVisc * mu * mu;
+            pipi /= restDensity;
+            glm::vec3 grad_Wvis = pipi * dist * kernelConst / std::pow(2.718282f, distRatio);
+            netForceVis -= grad_Wvis;
+        }
     }
-    __cubeBoundaryCellIdx();
-    unsigned int currentCellIdx = -1;
-    unsigned int prevCellIdx = -1;
-    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-
-        currentCellIdx = particles[particleIdx].cellIdx;
-        if (prevCellIdx != currentCellIdx) {
-            neighbors->clear();
-            neighborSearch(neighbors, particleIdx);
-        }
-        particles[particleIdx].force_vis = glm::vec3(0);
-        particles[particleIdx].force_ext = glm::vec3(0);
-        prevCellIdx = currentCellIdx;
-    }
-
-
-    bool densityOverFlag = false;
-    unsigned int iteration = 0;
-
-
-    while (iteration++ < minIter || densityOverFlag && iteration < maxIter) {
-        int largerParticleNum = 0;
-        densityOverFlag = false;
-
-        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-            particles[particleIdx].pv = particles[particleIdx].vel + ((particles[particleIdx].force_p + particles[particleIdx].force_vis) / particleMass + acc_g) * deltaTime;
-            particles[particleIdx].px = particles[particleIdx].pos + particles[particleIdx].pv * deltaTime;
-
-            predoutBoundarySolution(&particles[particleIdx]);
-
-        }
-      
-
-        __cubeBoundaryCellIdxPred();
-        currentCellIdx = -1;
-        prevCellIdx = -1;
-        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-
-            currentCellIdx = particles[particleIdx].cellIdx;
-            if (prevCellIdx != currentCellIdx) {
-                neighbors->clear();
-                neighborSearch(neighbors, particleIdx);
-            }
-
-            particles[particleIdx].density = calcDensity(particleIdx);
-
-            particles[particleIdx].densityVar = (particles[particleIdx].density - restDensity>=0)? particles[particleIdx].density - restDensity : 0.0f;
-        }
-
-        __cubeBoundaryCellIdxPred();
-        currentCellIdx = -1;
-        prevCellIdx = -1;
-
-        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-
-            currentCellIdx = particles[particleIdx].cellIdx;
-            if (prevCellIdx != currentCellIdx) {
-                neighbors->clear();
-                neighborSearch(neighbors, particleIdx);
-            }
-            if ((particles[particleIdx].densityVar / restDensity) > eta) {
-                largerParticleNum++;
-                densityOverFlag = true;
-                particles[particleIdx].pressure += particles[particleIdx].densityVar *calcDelta(particleIdx);
-            }
-            prevCellIdx = currentCellIdx;
-        }
-
-        currentCellIdx = -1;
-        prevCellIdx = -1;
-        for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-
-            currentCellIdx = particles[particleIdx].cellIdx;
-            if (prevCellIdx != currentCellIdx) {
-                neighbors->clear();
-                neighborSearch(neighbors, particleIdx);
-            }
-
-            particles[particleIdx].force_p = forcePressureSpiky(particleIdx);
-
-            prevCellIdx = currentCellIdx;
-        }
-
-        std::cout<<"============================================================larger part : " << largerParticleNum << std::endl;
-    }
-
-    for (unsigned int particleIdx = 0; particleIdx < numParticle; particleIdx++) {
-        particles[particleIdx].vel = particles[particleIdx].pv;
-        particles[particleIdx].pos = particles[particleIdx].px;
-    }
-    
-    std::cout << iteration << std::endl;
-
-//    system("PAUSE");
-
+    return netForceVis; 
 }
 
+glm::vec3 forceSurfaceTension(unsigned int particleIdx) {
+    return glm::vec3(0);
+}

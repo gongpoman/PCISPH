@@ -10,7 +10,15 @@ in float height;
 
 void main(){
 
-	vec3 objectColor = vec3(0, 0.6*height ,1-0.6*height);
+	vec3 objectColor = vec3(0.4, 0.4 ,1);
+
+	if(height>0.5f){
+		objectColor = vec3(0.4, 0.4 ,0.4);
+	}
+	if(height>1.0f){
+		objectColor = vec3(0);
+	}
+
 
 	float ambientStrength = 0.1;
     	vec3 ambient = ambientStrength * vec3(1,1,1);
@@ -31,8 +39,5 @@ void main(){
 	
 	vec3 result = (ambient + diffuse + specular) * objectColor;
 
-	float alpha = 1.0f;
-//	if(height>0.8)
-//		alpha = 1.0f -height + 0.8f;
-    	FragColor = vec4(result, alpha);
+    	FragColor = vec4(result, 1.0f);
 }
