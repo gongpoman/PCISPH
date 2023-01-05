@@ -122,6 +122,7 @@ inline uint64_t mortonEncode_LUT(unsigned int x, unsigned int y, unsigned int z)
 
 unsigned int __nthDigit(unsigned int nGridDivisoin);
 
+//https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
 unsigned int mortonEncode(int x, int y, int z);
 
 void __mapBuffer(unsigned int& vbo, void* data, unsigned int size);
@@ -129,4 +130,5 @@ void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
+//https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
 glm::ivec3 mortonDecode(unsigned int morton);
