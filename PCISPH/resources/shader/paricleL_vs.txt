@@ -11,7 +11,6 @@ out vec3 LightPos;
 out float height;
 
 uniform vec3 lightPos;
-
 uniform mat4 proj,view;
 
 void main(){
@@ -21,5 +20,6 @@ void main(){
 	LightPos = vec3(view * vec4(lightPos, 1.0));
 	
 	height =  (instanceWorld * vec4(aPos,1.0f)).y;
+
 
 }

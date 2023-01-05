@@ -27,6 +27,26 @@ void brickInit();
 
 void instanceMat();
 
+void neighborSearch(unsigned int Idx);
+void neighborSearchPred(unsigned int Idx);
+
+
+void __cubeBoundaryCellIdx();
+void __cubeBoundaryCellIdxPred();
+glm::ivec3 __cubeCellCoord(glm::vec3 pos);
+void predoutBoundarySolution(Particle*);
+
+void PCIupdate();
+
+float calcPredDensity(unsigned int particleIdx);
+float calcDensity(unsigned int particleIdx);
+float calcDelta(unsigned int particleIdx);
+
+glm::vec3 forcePressureSpiky(unsigned int particleIdx);
+glm::vec3 forceVis(unsigned int particleIdx);
+glm::vec3 forceSurfaceTension(unsigned int particleIdx);
+
+
 
 
 extern const unsigned int SCR_WIDTH = 1280;
@@ -36,32 +56,81 @@ extern Camera cam(glm::vec3(2.0f, 1.3f, 2.0f));
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
+constexpr float linearVisc = 0.25f;
+constexpr float quadVisc = .5f;
 
 extern constexpr float deltaTime = 1 / 180.0f;
-
 glm::mat4* instWorlds;
 
 
+// particle setting.
+constexpr unsigned int numWaterParticleX = 15;
+constexpr unsigned int numWaterParticleY = 15;
+constexpr unsigned int numWaterParticleZ = 15;
+
+constexpr unsigned int numWaterParticle = numWaterParticleX * numWaterParticleY * numWaterParticleZ;
+unsigned int numWallParticle=0;
+unsigned int numParticle=0;
+unsigned int numDrawParticle;
 
 
-/*
+constexpr float restDensity = 997.0f;
+constexpr float radius = 0.025f;
+constexpr float particleMass = restDensity * 4.0f / 3.0f * 3.141592f * radius * radius * radius;
+constexpr float coreRad = radius * 4.0f;
+
 const float sideLenX =  numWaterParticleX / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
 const float sideLenY = numWaterParticleY / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
 const float sideLenZ = numWaterParticleZ / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
-*/
+
+constexpr glm::vec3 force_g = glm::vec3(0.0f, -9.8f, 0.0f) * particleMass;
+
+// boundary setting
+constexpr float boundaryX = 3.0f;
+constexpr float boundaryY = 1.5f;
+constexpr float boundaryZ = 3.0f;
+
+constexpr unsigned int nGridDivX = (unsigned int)(boundaryX / coreRad);
+constexpr unsigned int nGridDivY = (unsigned int)(boundaryY / coreRad);
+constexpr unsigned int nGridDivZ = (unsigned int)(boundaryZ / coreRad);
+
+unsigned int upperMaxGridDiv;
+
+std::vector<unsigned int>* neighborIdices;
+vector<Particle> brick; // cell boundary 한 칸.
+
+
+
+// predict - correct setting
+constexpr float eta = 0.01f; 
+constexpr unsigned int minIter = 0;
+constexpr unsigned int maxIter = 100;
 
 
 
 
 
 
+Particle* particles = NULL;
+vector<unsigned int> mortonCount;
+std::map<unsigned int, unsigned int> idxMap;
+std::vector<unsigned int> particleIndices;
 
+Particle* predParticles;
+vector<unsigned int> mortonCountPred;
+std::map<unsigned int, unsigned int> predIdxMap;
+std::vector<unsigned int> predParticleIndices;
+
+
+
+
+constexpr bool drawWallParticle = true;
 GLFWwindow* glInitialize();
 void initialStateLog();
 void sceanInitialize();
 std::tuple<Shader*,Model*,unsigned int> renderInitialize();
 
-PCISPH particleSystem(true);
+
 
 int main(){
     
@@ -309,6 +378,14 @@ glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
 }
 
 
+
+glm::vec3 gridLocalPos(glm::vec3 pos) {
+    float x = (pos.x / coreRad < FLT_EPSILON) ? ((int)(pos.x / coreRad) - 1) * coreRad : (int)(pos.x / coreRad) * coreRad;
+    float y = (pos.y / coreRad < FLT_EPSILON) ? ((int)(pos.y / coreRad) - 1) * coreRad : (int)(pos.y / coreRad) * coreRad;
+    float z = (pos.z / coreRad < FLT_EPSILON) ? ((int)(pos.z / coreRad) - 1) * coreRad : (int)(pos.z / coreRad) * coreRad;
+
+    return pos - glm::vec3(x, y, z);
+}
 
 
 
@@ -696,6 +773,21 @@ void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고,
 }
 
 
+glm::ivec3 __cubeCellCoord(glm::vec3 pos) {
+
+    float x = ((pos.x + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
+    float y = (pos.y / cubicBoundaryLen * nGridDivisoin);
+    float z = ((pos.z + cubicBoundaryLen / 2.0f) / cubicBoundaryLen * nGridDivisoin);
+
+    x = (x + FLT_EPSILON <= 0) ? -1.0f : x;
+    z = (z + FLT_EPSILON <= 0) ? -1.0f : z;
+    y = (pos.y + FLT_EPSILON <= 0) ? -1.0f : y;
+
+    return glm::ivec3((int)x, (int)y, (int)z);
+}
+
+
+
 
 
 GLFWwindow* glInitialize() {
@@ -733,7 +825,6 @@ GLFWwindow* glInitialize() {
 
     return window;
 }
-
 void initialStateLog() {
     std::cout << "========================================" << std::endl;
 
@@ -803,3 +894,151 @@ void sceanInitialize() {
 }
 
 
+void brickInit() {
+    const float wallDensity = restDensity; // wall의 전체 density가 물의 density와 같도록 설정.
+
+    Particle wallParticle = Particle();
+    wallParticle.isWall = true;
+    wallParticle.density = wallDensity;
+    wallParticle.pos = glm::vec3(0);
+
+    wallParticle.pressure = 0.0f; // TODO calc pressure 여기 박아넣을 값 찾아야 됨. 만약 안되면 음.. estimation 계속 해줘야 됨.
+
+    int numRow = (int)(coreRad / radius); // 5.0
+
+    for (unsigned int i = 0; i < numRow; i++) {
+        for (unsigned int j = 0; j < numRow; j++) {
+            for (unsigned int k = 0; k < numRow; k++) {
+                wallParticle.pos = glm::vec3(0) + glm::vec3(i * radius, j * radius, k * radius);
+                wallParticle.px = wallParticle.pos;
+                brick.push_back(wallParticle);
+            }
+        }
+    }
+}
+// TODO 정육면체의 boundary아니면 여기 고쳐야 됨.
+void gridInit() {
+
+    ////////////////////////////////////////////////
+    // 문제점이 있음. morton code를 쓸 때. 예를들어 3개의 축의 cell의 갯수가 27개씩 있다고 하자. 27*27*27. 그러면 사실 나올 수 있는 index의 경우의는 27^3 이 맞음. 근데 morton code로 encoding했을 때 나오는 index값은 0~32*32*32의 범위를 가진다.
+    // 그래서 cell idx를 만들 때 조금 고려해야 할 것들이 있음.
+    // 이것떄문에 지금 r = 0.025
+    // coreRad = 5*r 했을 때 한 축으로 32개의 cell이 나와서 radius, coreRad 이렇게 고정함.
+    ////////////////////////////////////////////////
+    unsigned int numBoundary = 0;
+
+    std::vector<glm::vec3> boundaryOrigins;
+
+    for (unsigned int i = 0; i < nGridDivX; i++) {
+        for (unsigned int j = 0; j < nGridDivY; j++) {
+            for (unsigned int k = 0; k < nGridDivZ; k++) {
+
+                unsigned int cidx = __cubeMorton(i, j, k);
+
+                bool isBoundaryCell = false;
+
+                //////////////////////////////////////////////// 
+                /// mortonIdx neighbor
+                //////////////////////////////////////////////// 
+                for (int ii = -1; ii < 2; ii++) {
+                    for (int jj = -1; jj < 2; jj++) {
+                        for (int kk = -1; kk < 2; kk++) {
+
+                            bool x1 = i == 0 && ii == -1;
+                            bool x2 = i == nGridDivX - 1 && ii == 1;
+                            bool y1 = j == 0 && jj == -1;
+                            bool y2 = j == nGridDivY - 1 && jj == 1;
+                            bool z1 = k == 0 && kk == -1;
+                            bool z2 = k == nGridDivZ - 1 && kk == 1;
+
+                            if (!(x1 || x2 || y1 || y2 || z1 || z2)) {
+                                glm::ivec3 coord = glm::ivec3(i + ii, j + jj, k + kk);
+                                unsigned int neighborCell = __cubeMorton(coord.x, coord.y, coord.z);
+
+                                if (neighborCell != (unsigned int)(-1))     // 다른 모양으로 했을 때. 지금은 32*32로 갯수가 딱 떨어지니까. 이렇게 조건 해도 되는데. coreRad바꾸거나 그러면 바로 이 조건이 무너지게 됨.
+                                    neighborIdices[cidx].push_back(neighborCell);  // 근데 일단 문제는 당장 4*4 길이로 하게 되면 boundary cell의 particle들이 너무 많아서 마음에 안드는데  grid를 줄이려면 어떻게든 해야됨.
+                            }
+                            else {
+                                isBoundaryCell = true;
+                            }
+                        }
+                    }
+                }
+                ////////////////////////////////////////////////
+
+
+                if (isBoundaryCell && (j + 1) * coreRad <= 1.0f) {
+                    numBoundary++;
+                    boundaryOrigins.push_back(glm::vec3(i * coreRad - boundaryX / 2.0f, j * coreRad, k * coreRad - boundaryZ / 2.0f));
+                }
+            }
+        }
+    }
+
+    numWallParticle = brick.size() * numBoundary; // determined number of boundary particle 
+
+    numParticle = numWallParticle + numWaterParticle;
+
+    particles = new Particle[numParticle];
+    predParticles = new Particle[numParticle];
+
+    //boundary origins 돌면서. numParticle 부터 numWallParticle-1까지 채워넣기.
+    unsigned int offsetIdx = 0;
+
+    for (auto iter = boundaryOrigins.begin(); iter != boundaryOrigins.end(); iter++) {
+        addWallParticles(*iter, offsetIdx++);
+    }
+
+}
+void addWallParticles(glm::vec3 cellOrigin, unsigned int offsetIdx) {
+
+    vector<Particle> tempBrick = brick;
+
+    for (unsigned int i = 0; i < brick.size(); i++) {
+        tempBrick[i].pos += cellOrigin;
+        tempBrick[i].px = tempBrick[i].pos;
+
+        glm::ivec3 cellIdxCoord = __cubeCellCoord(tempBrick[i].pos);
+        tempBrick[i].cellIdx = __cubeMorton(cellIdxCoord.x, cellIdxCoord.y, cellIdxCoord.z);
+        tempBrick[i].cellIdxPred = tempBrick[i].cellIdx;
+
+        particles[numWaterParticle + i + offsetIdx * brick.size()] = tempBrick[i];
+    }
+
+}
+
+void particleInit(int mode) {
+
+    if (mode == 0) {
+        int numRow = pow(numWaterParticle, 1 / 3.0f);
+
+
+        for (unsigned int i = 0; i < numRow; i++) {
+            for (unsigned int j = 0; j < numRow; j++) {
+                for (unsigned int k = 0; k < numRow; k++) {
+
+                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(sideLen / 2.0f - sideLen * (i / (float)numRow)
+                        , sideLen - sideLen * (j / (float)numRow) + coreRad
+                        , sideLen / 2.0f - sideLen * (k / (float)numRow));
+                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
+
+                }
+            }
+        }
+    }
+    if (mode == 1) {
+        int numRow = pow(numWaterParticle, 1 / 3.0f);
+
+        for (unsigned int i = 0; i < numRow; i++) {
+            for (unsigned int j = 0; j < numRow; j++) {
+                for (unsigned int k = 0; k < numRow; k++) {
+
+                    particles[i * numRow * numRow + numRow * j + k].pos = glm::vec3(sideLen * (i / (float)numRow) - cubicBoundaryLen / 2.0f + coreRad
+                        , sideLen - sideLen * (j / (float)numRow) + coreRad
+                        , sideLen * (k / (float)numRow) - cubicBoundaryLen / 2.0f + coreRad);
+                    particles[i * numRow * numRow + numRow * j + k].density = restDensity;
+                }
+            }
+        }
+    }
+}

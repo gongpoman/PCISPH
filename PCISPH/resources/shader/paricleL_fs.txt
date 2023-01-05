@@ -13,10 +13,10 @@ void main(){
 	vec3 objectColor = vec3(0.4, 0.4 ,1);
 
 	if(height>0.5f){
-		objectColor = vec3(0.4, 0.4 ,0.4);
+		objectColor = vec3(0.2, 0.2 ,0.8);
 	}
 	if(height>1.0f){
-		objectColor = vec3(0);
+		objectColor = vec3(0.4, 0.2,0.2);
 	}
 
 
@@ -40,4 +40,6 @@ void main(){
 	vec3 result = (ambient + diffuse + specular) * objectColor;
 
     	FragColor = vec4(result, 1.0f);
+	
+
 }
