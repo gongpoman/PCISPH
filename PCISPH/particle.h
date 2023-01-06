@@ -45,6 +45,37 @@ public:
 	}
 };
 
+struct ParticlesArray {
+	unsigned int count;
+	unsigned int numMaxParticles;
+
+	bool *isWall;
+
+	unsigned int *cellIdx;
+	glm::vec3 *vel;
+	glm::vec3 *pos;
+
+	unsigned int *cellIdxPred;
+	glm::vec3 *pv;
+	glm::vec3 *px;
+
+	glm::vec3 *force_p;
+	glm::vec3 *force_vis;
+	glm::vec3 *force_ext;
+
+	glm::vec3 force_g;
+
+	float *pressure;
+	float *density;
+	float *densityVar;
+
+
+	/* dependent...
+	void __particlesArrInit(ParticlesArray*, unsigned int numbers);
+	void __appendParticle(ParticlesArray*, Particle);
+	*/
+};
+
 
 class PCISPH {
 public:
@@ -56,15 +87,17 @@ public:
 	bool drawWall;
 	
 
-	Particle *particles;
+	ParticlesArray particles;				// delete 필요
 
-	Particle *fluidParticles;
-	Particle *wallParticles;
+	ParticlesArray fluidParticles;			// delete 필요
+	ParticlesArray wallParticles;			// delete 필요
 
 	float restDensity;
 	float radius;
 	float particleMass;
 	float coreRad;
+
+
 
 	unsigned int numWaterParticlesX;
 	unsigned int numWaterParticlesY;
@@ -100,13 +133,16 @@ private :
 	void __sceneInitialize();
 	void __brickInit();
 	void __gridInit();
-	void __addWallParticles(glm::vec3, unsigned int);
+	void __addWallParticles(glm::vec3);
 	void __particleInit(int mode);
 
 	glm::ivec3 __getCellCoord(glm::vec3);
 
 	glm::vec3 __gridLocalPos(glm::vec3 pos);
 
+
+	void __particlesArrInit(ParticlesArray*,unsigned int numbers);
+	void __appendParticle(ParticlesArray*, Particle);
 };
 
 

@@ -13,6 +13,7 @@ PCISPH::PCISPH(unsigned int numX, unsigned int numY, unsigned int numZ,bool draw
 	particleMass = restDensity * 4.0f / 3.0f * 3.141592f * radius * radius * radius;
 	coreRad = radius * 5.0f;
 
+
     numWaterParticlesX = numX;
     numWaterParticlesY = numY;
     numWaterParticlesZ = numZ;
@@ -43,6 +44,7 @@ void PCISPH::__sceneInitialize() {
 	__gridInit();
     __particleInit(0);
 }
+
 void PCISPH::__brickInit() {
 	const float wallDensity = restDensity; // wall의 전체 density가 물의 density와 같도록 설정.
 
@@ -65,7 +67,6 @@ void PCISPH::__brickInit() {
 		}
 	}
 }
-
 void PCISPH::__gridInit() {
 //    neighborIdices = new std::vector<glm::ivec3>[nGridDivX * nGridDivY * nGridDivZ]; 
 
@@ -121,21 +122,19 @@ void PCISPH::__gridInit() {
     
     numDrawParticles = (drawWall) ? numParticles : numFluidParticles;
 
-    wallParticles= new Particle[numWallParticles];
+    __particlesArrInit(&wallParticles,numWallParticles);
 //  predParticles = new Particle[numParticle];
 
-    unsigned int offsetIdx = 0;
-
     for (auto iter = boundaryOrigins.begin(); iter != boundaryOrigins.end(); iter++) {
-        __addWallParticles(*iter, offsetIdx++);
+        __addWallParticles(*iter);
     }
-}
 
+}
 
 void PCISPH::__particleInit(int mode) {
 
-    particles = new Particle[numParticles];
-    fluidParticles = new Particle[numFluidParticles];
+    __particlesArrInit(&particles, numParticles);
+    __particlesArrInit(&fluidParticles, numFluidParticles);
 
     //TODO================================================================================================================================================================================================================================================
     if (mode == 0) {
@@ -169,7 +168,7 @@ void PCISPH::__particleInit(int mode) {
     }
 }
 
-void PCISPH::__addWallParticles(glm::vec3 cellOrigin, unsigned int offsetIdx) {
+void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
 
     std::vector<Particle> tempBrick = brick;
 
@@ -181,7 +180,7 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin, unsigned int offsetIdx) {
         tempBrick[i].cellIdx = mortonEncode(cellIdxCoord.x, cellIdxCoord.y, cellIdxCoord.z);
         tempBrick[i].cellIdxPred = tempBrick[i].cellIdx;
 
-        particles[numFluidParticles + i + offsetIdx * brick.size()] = tempBrick[i];
+        __appendParticle(&wallParticles,tempBrick[i]);
     }
 
 }
@@ -195,14 +194,67 @@ glm::ivec3 PCISPH::__getCellCoord(glm::vec3 position) {
 
     return glm::ivec3((int)x, (int)y, (int)z);
 }
-
-
-
-
 glm::vec3 PCISPH::__gridLocalPos(glm::vec3 pos) {
     float x = (pos.x / coreRad < FLT_EPSILON) ? ((int)(pos.x / coreRad) - 1) * coreRad : (int)(pos.x / coreRad) * coreRad;
     float y = (pos.y / coreRad < FLT_EPSILON) ? ((int)(pos.y / coreRad) - 1) * coreRad : (int)(pos.y / coreRad) * coreRad;
     float z = (pos.z / coreRad < FLT_EPSILON) ? ((int)(pos.z / coreRad) - 1) * coreRad : (int)(pos.z / coreRad) * coreRad;
 
     return pos - glm::vec3(x, y, z);
+}
+
+void PCISPH::__particlesArrInit(ParticlesArray* particleArr,unsigned int numbers) {
+
+    particleArr->count = 0;
+    particleArr->numMaxParticles = numbers;
+
+    particleArr->isWall = new bool[numbers];
+
+    particleArr->cellIdx = new unsigned int[numbers];
+    particleArr->cellIdxPred = new unsigned int[numbers];
+
+    particleArr->pressure = new float[numbers];
+    particleArr->density = new float[numbers];
+    particleArr->densityVar = new float[numbers];
+
+    particleArr->vel= new glm::vec3[numbers];
+    particleArr->pos= new glm::vec3[numbers];
+    particleArr->pv= new glm::vec3[numbers];
+    particleArr->px= new glm::vec3[numbers];
+    
+    particleArr->force_p= new glm::vec3[numbers];
+    particleArr->force_ext= new glm::vec3[numbers];
+    particleArr->force_vis= new glm::vec3[numbers];
+
+    particleArr->force_g = glm::vec3(0, -9.8f, 0) * particleMass;
+
+}
+void PCISPH::__appendParticle(ParticlesArray* particleArr, Particle particle) {
+
+    if (particleArr->count >= particleArr->numMaxParticles) {
+        std::cout << "ERROR :: PARTICLE ARRAY IS FULL" << std::endl;
+        system("PAUSE");
+        return;
+    }
+
+    unsigned int idx = particleArr->count;
+
+    particleArr->isWall[idx] = particle.isWall;
+
+    particleArr->cellIdx[idx] = particle.cellIdx;
+    particleArr->cellIdxPred[idx] = particle.cellIdxPred;
+
+    particleArr->pressure[idx] = particle.pressure;
+    particleArr->density[idx] = particle.density;
+    particleArr->densityVar[idx] = particle.densityVar;
+
+    particleArr->vel[idx] = particle.vel;
+    particleArr->pos[idx] = particle.pos;
+    particleArr->pv[idx] = particle.pv;
+    particleArr->px[idx] = particle.px;
+
+    particleArr->force_p[idx] = particle.force_p;
+    particleArr->force_ext[idx] = particle.force_ext;
+    particleArr->force_vis[idx] = particle.force_vis;
+
+    particleArr->count++;
 }
