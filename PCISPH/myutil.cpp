@@ -55,10 +55,10 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     cam.processMouseScroll(yoffset);
 }
 
-unsigned int mortonEncode(int x, int y, int z) {
-    x = (x <0) ? x : -1;
-    y = (y <0) ? y : -1;
-    z = (z <0) ? z : -1;
+int mortonEncode(int x, int y, int z) {
+    x = (x <0) ?  -1:x;
+    y = (y <0) ?  -1:y;
+    z = (z <0) ? -1:z;
 
     if ((x < 0) || (y < 0) || (z < 0)) // out of bounary
         return -1;

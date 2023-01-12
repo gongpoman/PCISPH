@@ -19,49 +19,26 @@
 #include "particle.h"
 
 
-void particleInit(int mode);
-void addWallParticles(glm::vec3 cellOrigin,unsigned int);
-void gridInit();
-void brickInit();
-
-
 void instanceMat();
-
-
 
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
-extern Camera cam(glm::vec3(2.0f, 1.3f, 2.0f));
+extern Camera cam(glm::vec3(0.0f, 1.5f, 3.0f));
+
+PCISPH pcisph(glm::ivec3(20,20,20),glm::vec3(3.0f,1.5f,3.0f), false);
 
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
-
-extern constexpr float deltaTime = 1 / 180.0f;
+extern const float deltaTime = 1 / 180.0f;
 
 glm::mat4* instWorlds;
 
 
-
-
-/*
-const float sideLenX =  numWaterParticleX / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
-const float sideLenY = numWaterParticleY / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
-const float sideLenZ = numWaterParticleZ / numWaterParticle * std::pow(numWaterParticle * particleMass / restDensity, 1.0f / 3.0f);
-*/
-
-
-
-
-
-
-
 GLFWwindow* glInitialize();
 void initialStateLog();
-void sceanInitialize();
-std::tuple<Shader*,Model*,unsigned int> renderInitialize();
 
-PCISPH particleSystem(true);
+std::tuple<Shader*,Model*,unsigned int> renderInitialize();
 
 int main(){
     
@@ -72,13 +49,10 @@ int main(){
     if (!window)
         return -1;
 
+    instWorlds = new glm::mat4[pcisph.numDrawParticles];
+    instanceMat();
 
-    // particle, grid init
-    sceanInitialize();
-
-
-
-    //Sphere render setting
+    //particle render setting
     Shader* particleShader;
     Model* sphere;
     unsigned int instVBO;
@@ -97,16 +71,16 @@ int main(){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         ////////////Update
-        PCIupdate();
+        pcisph.update();
         instanceMat();
-        __mapBuffer(instVBO, instWorlds, numDrawParticle* sizeof(glm::mat4));
+        __mapBuffer(instVBO, instWorlds, pcisph.numDrawParticles* sizeof(glm::mat4));
 
 
         ////////////render 
         particleShader->use();
         for (unsigned int i = 0; i < sphere->meshes.size(); i++) {
             glBindVertexArray(sphere->meshes[i].VAO);
-            glDrawElementsInstanced(GL_TRIANGLES, sphere->meshes[i].indices.size(), GL_UNSIGNED_INT, 0, numDrawParticle);
+            glDrawElementsInstanced(GL_TRIANGLES, sphere->meshes[i].indices.size(), GL_UNSIGNED_INT, 0, pcisph.numDrawParticles);
             glBindVertexArray(0);
         }
         glUseProgram(0);
@@ -114,25 +88,17 @@ int main(){
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        std::cout << "end=====================================================================================================================" << std::endl;
+        std::cout << frame << " frame end=====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
 
-        /* To Test
-        for (unsigned int i = 0; i < numParticle; i++) {
-            if (particles[i].pos.y > 3.0f)
-                std::cout << i<<" : "<<particles[i].pos.y << std::endl;
-        }
-        */
     }
 
     std::cout << frame << "frames rendered" << std::endl;
 
     //global variables 
-    delete[] predParticles;
-    delete[] particles; 
     delete[] instWorlds;
     // local variables
     delete sphere;
@@ -143,12 +109,149 @@ int main(){
 }
 
 
+GLFWwindow* glInitialize() {
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "PCISPH", NULL, NULL);
+
+    if (window == NULL)
+    {
+        std::cout << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return NULL;
+    }
+    glfwMakeContextCurrent(window);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        std::cout << "Failed to initialize GLAD" << std::endl;
+        return NULL;
+    }
+
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glEnable(GL_DEPTH_TEST);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
 
+    //    glfwSetCursorPosCallback(window, mouse_callback);
+    //    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    return window;
+}
+
+void initialStateLog() {
+    std::cout << "========================================" << std::endl;
+
+    std::cout << "totalParticles : " << pcisph.numParticles << std::endl <<
+        "Water Particles : " << pcisph.numFluidParticles << std::endl <<
+        "Wall Particles : " << pcisph.numWallParticles << std::endl << std::endl << std::endl;
+
+    std::cout << "DRAWALL ? T/F : " << ((pcisph.drawWall) ? "T" : "F") << std::endl;
+
+    std::cout << "========================================" << std::endl;
+    system("PAUSE");
+}
+std::tuple < Shader*, Model*, unsigned int > renderInitialize() {
+
+    Shader* particleShader = new Shader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
+    Model* sphere = new Model("resources/objects/sphere.obj");
+
+    cam.position += glm::vec3(pcisph.boundaryX / 2.0f, 0.0f, pcisph.boundaryZ / 2.0f);
+
+    particleShader->use();
+    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f, 0.5f, 0.0f) + glm::vec3(pcisph.boundaryX / 2.0f, 0.0f, pcisph.boundaryZ / 2.0f), cam.up);
+    glm::mat4 projMat = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "proj"), 1, GL_FALSE, &projMat[0][0]);
+    glUniform3f(glGetUniformLocation(particleShader->ID, "lightPos"), cam.position.x, cam.position.y, cam.position.z);
+    glUseProgram(0);
+
+    unsigned int instVBO;
+
+    for (unsigned int i = 0; i < sphere->meshes.size(); i++) {  // Definitely, sphere->meshes.size() = 1
+
+        glBindVertexArray(sphere->meshes[i].VAO);
+
+        glGenBuffers(1, &instVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, instVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * pcisph.numDrawParticles, &instWorlds[0][0], GL_DYNAMIC_DRAW);
+
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(1 * sizeof(glm::vec4)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(2 * sizeof(glm::vec4)));
+        glEnableVertexAttribArray(6);
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(3 * sizeof(glm::vec4)));
+
+        glVertexAttribDivisor(3, 1);
+        glVertexAttribDivisor(4, 1);
+        glVertexAttribDivisor(5, 1);
+        glVertexAttribDivisor(6, 1);
+
+        glBindVertexArray(0);
+    }
+
+    return { particleShader,sphere,instVBO };
+}
+
+void instanceMat() {
+
+    int idx = 0;
+    const float rad = pcisph.radius;
+
+    if (pcisph.drawWall) {
+        for (unsigned int i = 0; i < pcisph.numParticles; i++) {
+            instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.particles.pos[i]);
+            instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+            idx++;
+        }
+    }
+    else {
+        for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
+            instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
+            instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+            idx++;
+
+        }
+    }
 
 
+    //LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
+    //LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
+    //LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
+    //LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
+    //LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
+
+        // TODO particle.h 참조. 여기 써놓은 것을 해야 log를 찍을 수 있고, 잘 parpticle이 박혔는지 확인할 수 있음. 그리고 그 부분이 아마 핵심부분임.
+        /*
+        if (pcisph.drawWall) {
+            for (unsigned int i = 0; i < pcisph.numParticles; i++)
+                std::cout << pcisph.particles.pos[i].x<<", " << pcisph.particles.pos[i].y << ", " << pcisph.particles.pos[i].z << std::endl;
+        }
+        else{
+            for (unsigned int i = 0; i < pcisph.numFluidParticles; i++)
+                std::cout << pcisph.fluidParticles.pos[i].x << ", " << pcisph.fluidParticles.pos[i].y << ", " << pcisph.fluidParticles.pos[i].z << std::endl;
+
+        }
+        */
+}
+
+//================================================================================
+//================================================================================
+//================================================================================
+//================================================================================
+//================================================================================
 
 
+/*
 float calcDelta(unsigned int particleIdx) {
 
     const float kernelConst = 15.0f / 3.141592f / (coreRad * coreRad * coreRad * coreRad * coreRad * coreRad);
@@ -308,10 +411,6 @@ glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
     return netForceP;
 }
 
-
-
-
-
 // TODO water particle에 대해서만 해야되는 놈인지, wall particle 까지 고려해야 하는 놈인지 cut을 잘 해야돼.
 void PCIupdate() {
 
@@ -459,16 +558,6 @@ void PCIupdate() {
 //=============================================================== 아마 다 구현 되지 않았을까...
 
 
-void instanceMat() {
-    int idx = 0;
-    for (unsigned int i = 0; i < numParticle; i++) {
-        if (!particles[i].isWall || drawWallParticle) {
-            instWorlds[idx] = glm::translate(glm::mat4(1.0f), particles[i].pos);
-            instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(0.025f));
-            idx++;
-        }
-    }
-}
 
 
 void predoutBoundarySolution(Particle* particle) {
@@ -524,7 +613,6 @@ void neighborSearch(unsigned int idx) {
         }
     }
 }
-
 void neighborSearchPred(unsigned int idx) {
 
     for (unsigned int i = 0; i < neighborIdices[predParticles[idx].cellIdxPred].size(); i++) {
@@ -694,112 +782,4 @@ void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고,
 
     delete[] mortonCounter;
 }
-
-
-
-
-GLFWwindow* glInitialize() {
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "PCISPH", NULL, NULL);
-
-    if (window == NULL)
-    {
-        std::cout << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return NULL;
-    }
-    glfwMakeContextCurrent(window);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cout << "Failed to initialize GLAD" << std::endl;
-        return NULL;
-    }
-
-    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-    glEnable(GL_DEPTH_TEST);
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-
-    //    glfwSetCursorPosCallback(window, mouse_callback);
-    //    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    return window;
-}
-
-void initialStateLog() {
-    std::cout << "========================================" << std::endl;
-
-    std::cout << "totalParticles : " << numParticle << std::endl <<
-        "Water Particles : " << numWaterParticle << std::endl <<
-        "Wall Particles : " << numWallParticle << std::endl;
-
-    std::cout << "========================================" << std::endl;
-    system("PAUSE");
-}
-std::tuple < Shader*, Model*,unsigned int > renderInitialize() {
-
-    Shader* particleShader = new Shader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
-    Model* sphere = new Model("resources/objects/sphere.obj");
-
-    particleShader->use();
-    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f, 0.5f, 0.0f), cam.up);
-    glm::mat4 projMat = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "proj"), 1, GL_FALSE, &projMat[0][0]);
-    glUniform3f(glGetUniformLocation(particleShader->ID, "lightPos"), cam.position.x, cam.position.y, cam.position.z);
-    glUseProgram(0);
-
-    unsigned int instVBO;
-
-    for (unsigned int i = 0; i < sphere->meshes.size(); i++) {  // Definitely, sphere->meshes.size() = 1
-
-        glBindVertexArray(sphere->meshes[i].VAO);
-
-        glGenBuffers(1, &instVBO);
-        glBindBuffer(GL_ARRAY_BUFFER, instVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * numDrawParticle, &instWorlds[0][0], GL_DYNAMIC_DRAW);
-
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(1 * sizeof(glm::vec4)));
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(2 * sizeof(glm::vec4)));
-        glEnableVertexAttribArray(6);
-        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(3 * sizeof(glm::vec4)));
-
-        glVertexAttribDivisor(3, 1);
-        glVertexAttribDivisor(4, 1);
-        glVertexAttribDivisor(5, 1);
-        glVertexAttribDivisor(6, 1);
-
-        glBindVertexArray(0);
-    }
-
-    return { particleShader,sphere,instVBO};
-}
-void sceanInitialize() {
-
-    brickInit();
-    upperNGridDiv = __nthDigit(nGridDivisoin);
-    neighborIdices = new std::vector<unsigned int>[upperNGridDiv * upperNGridDiv * upperNGridDiv]; // nGridDiv^3 만큼이 아니라. nGridDiv의 2진수형태의 올림만큼 잡아야 됨. ngriddiv= 27 -> 32^3개 잡아야 됨.
-    gridInit();
-
-    particleInit(0);
-
-    numDrawParticle = (drawWallParticle) ? numParticle : numWaterParticle;
-
-    instWorlds = new glm::mat4[numDrawParticle];
-    instanceMat();
-
-}
-
-
+*/

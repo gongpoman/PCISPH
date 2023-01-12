@@ -123,7 +123,7 @@ inline uint64_t mortonEncode_LUT(unsigned int x, unsigned int y, unsigned int z)
 unsigned int __nthDigit(unsigned int nGridDivisoin);
 
 //https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
-unsigned int mortonEncode(int x, int y, int z);
+int mortonEncode(int x, int y, int z);
 
 void __mapBuffer(unsigned int& vbo, void* data, unsigned int size);
 void processInput(GLFWwindow* window);
