@@ -30,7 +30,7 @@ PCISPH pcisph(glm::ivec3(20,20,20),glm::vec3(3.0f,1.5f,3.0f), false);
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
-extern const float deltaTime = 1 / 180.0f;
+extern const float deltaTime = 1 / 180.0f;s
 
 glm::mat4* instWorlds;
 
@@ -64,7 +64,7 @@ int main(){
     while (!glfwWindowShouldClose(window))
     {
         frame++;
-        std::cout<<frame <<" frame start=====================================================================================================================" << std::endl;
+        std::cout<<frame <<" frame start=======================================================================================" << std::endl;
 
         processInput(window);
         glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
@@ -88,7 +88,7 @@ int main(){
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        std::cout << frame << " frame end=====================================================================================================================" << std::endl;
+        std::cout << frame << " frame end=======================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
  
@@ -412,7 +412,6 @@ glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
 */
 
 /*
-
 // TODO water particle에 대해서만 해야되는 놈인지, wall particle 까지 고려해야 하는 놈인지 cut을 잘 해야돼.
 void PCIupdate() {
 
@@ -562,42 +561,6 @@ void PCIupdate() {
 
 
 
-void predoutBoundarySolution(Particle* particle) {
-    glm::ivec3 cellIdx = __cubeCellCoord(particle->px);
-    glm::ivec3 flag;
-
-    flag.x = (cellIdx.x == -1) ? -1 : (cellIdx.x >= nGridDivisoin) ? 1 : 0;
-    flag.z = (cellIdx.z == -1) ? -1 : (cellIdx.z >= nGridDivisoin) ? 1 : 0;
-    flag.y = (cellIdx.y == -1) ? -1 : (cellIdx.y >= nGridDivisoin) ? 1 : 0;
-
-
-    if (flag.x == -1) {
-        particle->pv.x *= -1;
-        particle->px.x += 2 * (-cubicBoundaryLen / 2.0f - particle->px.x);
-    }
-    if (flag.x == 1) {
-        particle->pv.x *= -1;
-        particle->px.x += 2 * (cubicBoundaryLen / 2.0f - particle->px.x);
-    }
-
-    if (flag.z == -1) {
-        particle->pv.z *= -1;
-        particle->px.z += 2 * (-cubicBoundaryLen / 2.0f - particle->px.z);
-    }
-    if (flag.z == 1) {
-        particle->pv.z *= -1;
-        particle->px.z += 2 * (cubicBoundaryLen / 2.0f - particle->px.z);
-    }
-
-    if (flag.y == -1) {
-        particle->pv.y *= -0.999f;
-        particle->px.y = -(particle->px.y);
-    }
-    if (flag.y == 1) {
-        particle->pv.y *= -1;
-        particle->px.y += 2 * (+cubicBoundaryLen - particle->px.y);
-    }
-}
 
 
 void neighborSearch(unsigned int idx) {

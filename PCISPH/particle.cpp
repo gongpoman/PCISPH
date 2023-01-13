@@ -51,7 +51,6 @@ void PCISPH::__sceneInitialize() {
 	__gridInit();
     __particleInit(1);
     __sorterInit();
-
 }
 
 void PCISPH::__brickInit() {
@@ -144,8 +143,12 @@ void PCISPH::__particleInit(int mode) {
     __particlesArrInit(&particles, numParticles,ALL);
     __particlesArrInit(&fluidParticles, numFluidParticles,FLUID);
 
+   
+    
     float totMass = numFluidParticles* particleMass / restDensity;
-    float spacing = std::pow(totMass/ (float)((numFluidParticlesX - 1)* (numFluidParticlesY - 1)* (numFluidParticlesZ - 1)),1.0f/3.0f);
+
+    float spacing = (numFluidParticlesX > 1 && numFluidParticlesY > 1 && numFluidParticlesZ > 1) ?
+        std::pow(totMass / (float)((numFluidParticlesX - 1) * (numFluidParticlesY - 1) * (numFluidParticlesZ - 1)), 1.0f / 3.0f) : 0.0f;
 
     sideLenX = (float)numFluidParticlesX * spacing;
     sideLenY = (float)numFluidParticlesY * spacing;
@@ -165,6 +168,7 @@ void PCISPH::__particleInit(int mode) {
                     tempParticle.pos = glm::vec3(x,y,z);
                     glm::ivec3 cellCoordXYZ = __getCellCoord(tempParticle.pos);
                     tempParticle.cellIdx = mortonEncode(cellCoordXYZ.x, cellCoordXYZ.y, cellCoordXYZ.z );
+
 
                     __appendParticle(&fluidParticles, tempParticle,FLUID);
 
@@ -221,8 +225,9 @@ glm::ivec3 PCISPH::__getCellCoord(glm::vec3 position) {
     float y = position.y / boundaryY * (float)nGridDivY;
     float z = position.z / boundaryZ * (float)nGridDivZ;
 
-    if (x <= -FLT_EPSILON || y <= -FLT_EPSILON || z <= -FLT_EPSILON)
-        return glm::ivec3(-1, -1, -1);
+    x = (x <= -FLT_EPSILON) ? -1.0f : x;
+    y = (y <= -FLT_EPSILON) ? -1.0f : y;
+    z = (z <= -FLT_EPSILON) ? -1.0f : z;
 
     return glm::ivec3((int)x, (int)y, (int)z);
 }
@@ -326,8 +331,8 @@ void PCISPH::__sorterInit() {
     fluidParticlesSorter = Z_Sort(numFluidParticles, &fluidParticles, FLUID, maxCIdx);
     wallParticlesSorter = Z_Sort(numWallParticles, &wallParticles, WALL, maxCIdx);
 
-
     wallParticlesSorter.sortby(ACTUAL_POS);             //wall particle 정렬
+
 
     fluidParticlesSorter.sortby(ACTUAL_POS);            //fluid particle 정렬
 
@@ -365,19 +370,16 @@ PCISPH::~PCISPH() {
 
 void PCISPH::update() {
 
+
     ////////////////////////////////////////////////////////////
     /// initial state calculation
-    ////////////////////////////////////////////////////////////    
     fluidParticlesSorter.sortby(ACTUAL_POS);
 
-    fluidNCellIdx.clear();
-    wallNCellIdx.clear();
-
-    //std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
-    //std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
-
-    //각 cell에 대해서 neighbor cell중 particle이 있는 cell idx를 vector에 저장한다. 그리고 그것을 현재 cellIdx와 mapping 함.
+    fluidNCellIdx.clear();  //std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
+    wallNCellIdx.clear();   //std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
+   
     __makeNCellMap();
+    __initializeFrameStates();
 
     /* TEST
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
@@ -394,38 +396,19 @@ void PCISPH::update() {
     }
     system("PAUSE");
     */
-
-    for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
-        occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
-
-        unsigned int endIdx = fluidParticlesSorter.particleCounter[*occCellIdxIter];    // 현재 Cell에 fluid particle들이 fluidParticleArr에 정렬되어있음. 그 곳의 마지막 위치.
-        unsigned int startIdx = (occCellIdxIter == fluidParticlesSorter.occupiedCellIdx.begin()) ? 0 : fluidParticlesSorter.particleCounter[*(occCellIdxIter - 1)]; // 처음 위치
-
-        for (unsigned int idx = startIdx; idx < endIdx; idx++) {
-            fluidParticles.pressure[idx] = 0.0f;
-            fluidParticles.force_p[idx] = glm::vec3(0);
-            fluidParticles.force_ext[idx] = forceExt(idx);
-            fluidParticles.force_vis[idx] = forceVis(idx); // TODO 일단 SKIP
-        }
-    }
-    //////////////////////////////////////////////////////////// 
+    ////////////////////////////////////////////////////////////    
 
 
-    bool densityOverFlag = false;
-    unsigned int iteration = -1;
+
+    bool densityOverFlag = true;
+    unsigned int iteration = 0;
 
     while ((iteration < minIter || densityOverFlag) && iteration < maxIter) {
         int largerParticleNum = 0;
         densityOverFlag = false;
 
-        ////////////////////////////////////////////////////////////
-        /// pos, vel prediction. 
-        ////////////////////////////////////////////////////////////       
-        
-
-
-        //////////////////////////////////////////////////////////// 
-
+        /// pos, vel prediction.     
+        __pos_vel_Predict();
 
         ////////////////////////////////////////////////////////////
         /// Pred density variation.
@@ -454,8 +437,14 @@ void PCISPH::update() {
 
         ////////////////////////////////////////////////////////////  
 
-        std::cout << "============================================================larger part : " << largerParticleNum << std::endl;
+        std::cout << iteration+1<<"th iteration " << "larger part : " << largerParticleNum << std::endl;
         iteration++;
+    }
+
+
+    for (unsigned int i = 0; i < numFluidParticles; i++) {
+        fluidParticles.vel[i] = fluidParticles.pv[i];
+        fluidParticles.pos[i] = fluidParticles.px[i];
     }
 
 }
@@ -480,6 +469,7 @@ glm::vec3 PCISPH::forceP(unsigned int particleIdx) {
 }
 
 void PCISPH::__makeNCellMap(){
+    //각 cell에 대해서 neighbor cell중 particle이 있는 cell idx를 vector에 저장한다. 그리고 그것을 현재 cellIdx와 mapping 함.
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -524,6 +514,86 @@ void PCISPH::__nCellSearch(std::vector<unsigned int>* fluidNIdx, std::vector<uns
     }
 }
 
+void PCISPH::__initializeFrameStates() {
+
+    for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
+        occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
+
+        unsigned int endIdx = fluidParticlesSorter.particleCounter[*occCellIdxIter];    // 현재 Cell에 fluid particle들이 fluidParticleArr에 정렬되어있음. 그 곳의 마지막 위치.
+        unsigned int startIdx = (occCellIdxIter == fluidParticlesSorter.occupiedCellIdx.begin()) ? 0 : fluidParticlesSorter.particleCounter[*(occCellIdxIter - 1)]; // 처음 위치
+
+        for (unsigned int idx = startIdx; idx < endIdx; idx++) {
+            fluidParticles.pressure[idx] = 0.0f;
+            fluidParticles.force_p[idx] = glm::vec3(0);
+            fluidParticles.force_ext[idx] = forceExt(idx);
+            fluidParticles.force_vis[idx] = forceVis(idx); // TODO 일단 SKIP
+        }
+    }
+}
+
+void PCISPH::__pos_vel_Predict() {
+
+    for (unsigned int i = 0; i < numFluidParticles; i++) {
+        fluidParticles.pv[i] = fluidParticles.vel[i] + deltaTime * (fluidParticles.force_ext[i] + fluidParticles.force_p[i] + fluidParticles.force_vis[i] + fluidParticles.force_g) / particleMass;
+        fluidParticles.px[i] = fluidParticles.pos[i] + deltaTime * fluidParticles.pv[i];
+
+        __predOutGridResol(i);
+    }
+}
+void PCISPH::__predOutGridResol(unsigned int i) {
+
+    glm::ivec3 cellIdx = __getCellCoord(fluidParticles.px[i]);
+    glm::ivec3 flag;
+
+    flag.x = (cellIdx.x == -1) ? -1 : (cellIdx.x >= nGridDivX) ? 1 : 0;
+    flag.y = (cellIdx.y == -1) ? -1 : (cellIdx.y >= nGridDivY) ? 1 : 0;
+    flag.z = (cellIdx.z == -1) ? -1 : (cellIdx.z >= nGridDivZ) ? 1 : 0;
+
+
+    if (flag.x == -1) {
+        fluidParticles.pv[i].x *= -0.999f;
+        fluidParticles.px[i].x += 2*(-fluidParticles.px[i].x);
+    }
+    if (flag.x == 1) {
+        fluidParticles.pv[i].x *= -0.999f;
+        fluidParticles.px[i].x += 2 * (sideLenX - fluidParticles.px[i].x);
+    }
+
+    if (flag.y == -1) {
+        fluidParticles.pv[i].y *= -0.999f;
+        fluidParticles.px[i].y += 2 * (-fluidParticles.px[i].y);
+    }
+    if (flag.y == 1) {
+        fluidParticles.pv[i].y *= -0.999f;
+        fluidParticles.px[i].y += 2 * (sideLenY - fluidParticles.px[i].y);
+    }
+
+    if (flag.z == -1) {
+        fluidParticles.pv[i].z *= -0.999f;
+        fluidParticles.px[i].z += 2 * (-fluidParticles.px[i].z);
+    }
+    if (flag.z == 1) {
+        fluidParticles.pv[i].z *= -0.999f;
+        fluidParticles.px[i].z += 2 * (sideLenZ - fluidParticles.px[i].z);
+    }
+
+    // after push and reflection if there is outBoundary particle, that means simulation explode;
+    cellIdx = __getCellCoord(fluidParticles.px[i]);
+    flag.x = (cellIdx.x == -1) ? -1 : (cellIdx.x >= nGridDivX) ? 1 : 0;
+    flag.z = (cellIdx.z == -1) ? -1 : (cellIdx.z >= nGridDivY) ? 1 : 0;
+    flag.y = (cellIdx.y == -1) ? -1 : (cellIdx.y >= nGridDivZ) ? 1 : 0;
+
+    if (flag.x != 0 || flag.y != 0 || flag.z != 0) {
+        std::cout << "PCISPH::__PREDOUTGRIDRESOL() SIMULATION EXPLODE!!!" << std::endl;
+        system("PAUSE");
+    }
+}
+
+
+
+
+
+
 
 
 //==================================================================================
@@ -539,7 +609,7 @@ PCISPH::Z_Sort::Z_Sort(int count, ParticlesArray* pParticleArr,ARRTYPE type,unsi
 }
 
 void PCISPH::Z_Sort::sortby(SORTMODE mode) {
-    
+
     currentMode = mode;
     __buildCounter(); // offset을 만들어 놨음. cellIdx에 있는 particle이 몇개있는지 앎.
 
@@ -559,7 +629,9 @@ void PCISPH::Z_Sort::sortby(SORTMODE mode) {
     __particlesArrInit(&tempArr, count, arrT);
     __swapAndSort(&tempArr,sortedIdx);
 
+
     delete[] sortedIdx;
+
 }
 
 void PCISPH::Z_Sort::__buildCounter() {
@@ -574,8 +646,10 @@ void PCISPH::Z_Sort::__buildCounter() {
                 particleCounter[particleArr->cellIdx[i]]++;
             else
                 particleCounter[particleArr->cellIdx[i]] = 1;
+
         }
     }
+
     else if (currentMode == PRED_POS) {
 
         for (unsigned int i = 0; i < particleArr->count; i++) {
@@ -601,10 +675,8 @@ void PCISPH::Z_Sort::__buildCounter() {
     }
 
     for (auto iter = occupiedCellIdx.begin() + 1; iter != occupiedCellIdx.end(); iter++)
-        particleCounter[*iter] += particleCounter[*(iter - 1) ];
-
-
-
+        particleCounter[*iter] += particleCounter[*(iter - 1)];
+    
     //test
         /*
     if (arrT == WALL) {
@@ -645,10 +717,13 @@ unsigned int* PCISPH::Z_Sort::__buildSortedIdx() {
 
 
     if (currentMode == ACTUAL_POS) {
+
         for (unsigned int i = 0; i < count; i++) {
             unsigned int idx = occupiedCellIdxInv[particleArr->cellIdx[i]];
             sortParticleIdx[idx].push_back(i);
+
         }
+
     }
     else if (currentMode == PRED_POS) {
         for (unsigned int i = 0; i < count; i++) {
@@ -656,6 +731,7 @@ unsigned int* PCISPH::Z_Sort::__buildSortedIdx() {
             sortParticleIdx[idx].push_back(i);
         }
     }
+
 
     unsigned int iii = 0;
     for (auto iter = sortParticleIdx.begin(); iter != sortParticleIdx.end(); iter++) {

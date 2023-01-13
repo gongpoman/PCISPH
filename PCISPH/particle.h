@@ -213,8 +213,10 @@ private :
 	void __makeNCellMap();
 	void __nCellSearch(std::vector<unsigned int>* fluidNIdx, std::vector<unsigned int>* wallNIdx, glm::ivec3);
 
+	void __initializeFrameStates();
 
-
+	void __pos_vel_Predict();
+	void __predOutGridResol(unsigned int i);
 
 	void __sceneInitialize();
 	void __brickInit();
