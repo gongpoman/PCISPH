@@ -114,21 +114,21 @@ public:
 
 		void sortby(SORTMODE mode = ACTUAL_POS); // particleArr을 /particle Counter를 offset으로 하여/ mode를 기준으로 정렬.
 
-		void integrateSortedArr(Z_Sort wallSorter, Z_Sort fluidSorter, SORTMODE mode); // 정렬된 particlesArr 합치는거 
+//		void integrateSortedArr(Z_Sort wallSorter, Z_Sort fluidSorter, SORTMODE mode);
 	private:
-		void __integrateCounter(Z_Sort wallSorter, Z_Sort fluidSorter);
-		int* __integrateSortedIdx(Z_Sort wallSorter, Z_Sort fluidSorter);
-		void __integrate(Z_Sort wallSorter, Z_Sort fluidSorter, int*);
 
 		void __buildCounter();
 		unsigned int* __buildSortedIdx();
 		void __particlesArrInit(ParticlesArray* particleArr, unsigned int numbers, ARRTYPE arrtype);
 		void __swapAndSort(ParticlesArray* temp,unsigned int*);
 
+		//		void __integrateCounter(Z_Sort wallSorter, Z_Sort fluidSorter);
+//		int* __integrateSortedIdx(Z_Sort wallSorter, Z_Sort fluidSorter);
+//		void __integrate(Z_Sort wallSorter, Z_Sort fluidSorter, int*);
+
 	};
 
 public:
-
 
 	unsigned int numParticles;
 	unsigned int numFluidParticles;
@@ -143,7 +143,7 @@ public:
 	ParticlesArray fluidParticles;
 	ParticlesArray wallParticles;
 
-	Z_Sort particlesSorter;
+//	Z_Sort particlesSorter;
 	Z_Sort fluidParticlesSorter;
 	Z_Sort wallParticlesSorter;
 
@@ -160,7 +160,6 @@ public:
 	float coreRad;
 
 	//std::vector<glm::ivec3>* neighborIdices;
-
 	float eta;
 	unsigned int minIter;
 	unsigned int maxIter;
@@ -170,13 +169,16 @@ public:
 
 	void update();
 
-
 private :
 
-	std::vector<unsigned int> wallCellIdx;
+	std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
+	std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
+
+
+//	std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdxPred;
+//	std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdxPred;
 
 	std::vector<Particle> brick;
-
 
 	//particle constant
 	unsigned int numFluidParticlesX; // for particle initial position
@@ -194,6 +196,26 @@ private :
 	unsigned int upperMaxGridDiv;
 
 
+
+	//vectors
+
+	glm::vec3 forceVis(unsigned int particleIdx);
+	glm::vec3 forceExt(unsigned int particleIdx);
+	glm::vec3 forceP(unsigned int particleIdx);
+	//scalers
+
+	float calcDelta(unsigned int particleIdx);
+	float calcDensity(unsigned int particleIdx);
+	float calcPredDensity(unsigned int particleIdx);
+
+
+	//update sequence
+	void __makeNCellMap();
+	void __nCellSearch(std::vector<unsigned int>* fluidNIdx, std::vector<unsigned int>* wallNIdx, glm::ivec3);
+
+
+
+
 	void __sceneInitialize();
 	void __brickInit();
 	void __gridInit();
@@ -204,9 +226,6 @@ private :
 
 	glm::ivec3 __getCellCoord(glm::vec3);
 	glm::vec3 __gridLocalPos(glm::vec3 pos);
-
-
-
 
 	void __particlesArrInit(ParticlesArray*,unsigned int numbers,ARRTYPE arrtype);
 	void __appendParticle(ParticlesArray*, Particle, ARRTYPE arrtype);

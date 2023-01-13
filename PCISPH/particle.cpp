@@ -1,5 +1,6 @@
 #include<iostream>
 #include<vector>
+#include<unordered_map>
 
 #include "myutil.h"
 #include "particle.h"
@@ -39,7 +40,7 @@ PCISPH::PCISPH(glm::ivec3 numOfFluidParticles, glm::vec3 boundarySideLen,bool dr
 	minIter = 0;
 	maxIter = 100;
 
-    particlesSorter = Z_Sort();
+//    particlesSorter = Z_Sort();
     fluidParticlesSorter = Z_Sort();
     wallParticlesSorter = Z_Sort();
 
@@ -158,7 +159,7 @@ void PCISPH::__particleInit(int mode) {
                     Particle tempParticle = Particle();
 
                     float x = boundaryX / 2.0f + sideLenX * (((float)i / (float)numFluidParticlesX) - 0.5f);
-                    float y = sideLenY/(float)numFluidParticlesY * j;
+                    float y = sideLenY/(float)numFluidParticlesY * j + coreRad;
                     float z = boundaryZ / 2.0f + sideLenZ * (((float)k / (float)numFluidParticlesZ) - 0.5f);
 
                     tempParticle.pos = glm::vec3(x,y,z);
@@ -181,9 +182,9 @@ void PCISPH::__particleInit(int mode) {
                     Particle tempParticle = Particle();
 
 
-                    float x = sideLenX * ((float)i / (float)numFluidParticlesX);
-                    float y = sideLenY / (float)numFluidParticlesY * j;
-                    float z = sideLenZ * ((float)k / (float)numFluidParticlesZ);
+                    float x = sideLenX * ((float)i / (float)numFluidParticlesX) + coreRad;
+                    float y = sideLenY / (float)numFluidParticlesY * j + coreRad;
+                    float z = sideLenZ * ((float)k / (float)numFluidParticlesZ) + coreRad;
 
                     tempParticle.pos = glm::vec3(x, y, z);
                     glm::ivec3 cellCoordXYZ = __getCellCoord(tempParticle.pos);
@@ -321,7 +322,7 @@ void PCISPH::__deleteParticleArr(ParticlesArray* partArr, ARRTYPE arrtype) {
 void PCISPH::__sorterInit() {
     unsigned int maxCIdx = mortonEncode(nGridDivX - 1, nGridDivY - 1, nGridDivZ - 1);
 
-    particlesSorter = Z_Sort(numParticles, &particles, ALL, maxCIdx);
+//    particlesSorter = Z_Sort(numParticles, &particles, ALL, maxCIdx);
     fluidParticlesSorter = Z_Sort(numFluidParticles, &fluidParticles, FLUID, maxCIdx);
     wallParticlesSorter = Z_Sort(numWallParticles, &wallParticles, WALL, maxCIdx);
 
@@ -348,7 +349,8 @@ void PCISPH::__sorterInit() {
     */
 
     // 정렬된 두개로 전체에 대한 Arr을 만든다.
-    particlesSorter.integrateSortedArr(wallParticlesSorter, fluidParticlesSorter, ACTUAL_POS);
+
+    //particlesSorter.integrateSortedArr(wallParticlesSorter, fluidParticlesSorter, ACTUAL_POS);
 
 }
 
@@ -361,26 +363,168 @@ PCISPH::~PCISPH() {
 
 
 
-
 void PCISPH::update() {
 
     ////////////////////////////////////////////////////////////
     /// initial state calculation
-    ////////////////////////////////////////////////////////////       
-    for (int i = 0; i < numFluidParticles; i++) {
-        fluidParticles.pressure[i] = 0.0f;
-        fluidParticles.force_p[i] = glm::vec3(0);
-        fluidParticles.force_ext[i] = glm::vec3(0);
-        fluidParticles.force_vis[i] = glm::vec3(0);
+    ////////////////////////////////////////////////////////////    
+    fluidParticlesSorter.sortby(ACTUAL_POS);
+
+    fluidNCellIdx.clear();
+    wallNCellIdx.clear();
+
+    //std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
+    //std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
+
+    //각 cell에 대해서 neighbor cell중 particle이 있는 cell idx를 vector에 저장한다. 그리고 그것을 현재 cellIdx와 mapping 함.
+    __makeNCellMap();
+
+    /* TEST
+    for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
+        occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
+        std::cout << *occCellIdxIter << " cellIdx 의 neighbor" << std::endl;
+
+        for (auto ele : fluidNCellIdx[*occCellIdxIter]) {
+            std::cout << ele << " COORD : " << mortonDecode(ele).x << " : " << mortonDecode(ele).y << " : " << mortonDecode(ele).z << std::endl;
+        }
+        for (auto ele : wallNCellIdx[*occCellIdxIter]) {
+            std::cout << ele << " COORD : " << mortonDecode(ele).x << " : " << mortonDecode(ele).y << " : " << mortonDecode(ele).z << std::endl;
+        }
+        std::cout << "===================================" << std::endl;
+    }
+    system("PAUSE");
+    */
+
+    for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
+        occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
+
+        unsigned int endIdx = fluidParticlesSorter.particleCounter[*occCellIdxIter];    // 현재 Cell에 fluid particle들이 fluidParticleArr에 정렬되어있음. 그 곳의 마지막 위치.
+        unsigned int startIdx = (occCellIdxIter == fluidParticlesSorter.occupiedCellIdx.begin()) ? 0 : fluidParticlesSorter.particleCounter[*(occCellIdxIter - 1)]; // 처음 위치
+
+        for (unsigned int idx = startIdx; idx < endIdx; idx++) {
+            fluidParticles.pressure[idx] = 0.0f;
+            fluidParticles.force_p[idx] = glm::vec3(0);
+            fluidParticles.force_ext[idx] = forceExt(idx);
+            fluidParticles.force_vis[idx] = forceVis(idx); // TODO 일단 SKIP
+        }
     }
     //////////////////////////////////////////////////////////// 
-    fluidParticlesSorter.sortby(ACTUAL_POS);
-    particlesSorter.integrateSortedArr(wallParticlesSorter, fluidParticlesSorter, ACTUAL_POS);
 
-    // accumulation counter
-    // neighbor search
+
+    bool densityOverFlag = false;
+    unsigned int iteration = -1;
+
+    while ((iteration < minIter || densityOverFlag) && iteration < maxIter) {
+        int largerParticleNum = 0;
+        densityOverFlag = false;
+
+        ////////////////////////////////////////////////////////////
+        /// pos, vel prediction. 
+        ////////////////////////////////////////////////////////////       
+        
+
+
+        //////////////////////////////////////////////////////////// 
+
+
+        ////////////////////////////////////////////////////////////
+        /// Pred density variation.
+        ////////////////////////////////////////////////////////////
+
+
+
+        ////////////////////////////////////////////////////////////    
+
+
+
+
+        ////////////////////////////////////////////////////////////
+        /// actual density
+        ////////////////////////////////////////////////////////////       
+
+
+        //////////////////////////////////////////////////////////// 
+
+
+        ////////////////////////////////////////////////////////////
+        /// Pressure Force
+        ////////////////////////////////////////////////////////////
+
+
+
+        ////////////////////////////////////////////////////////////  
+
+        std::cout << "============================================================larger part : " << largerParticleNum << std::endl;
+        iteration++;
+    }
 
 }
+
+float PCISPH::calcDelta(unsigned int particleIdx) {
+    return 0.0f;
+}
+float PCISPH::calcPredDensity(unsigned int particleIdx) {
+    return 0.0f;
+}
+float PCISPH::calcDensity(unsigned int particleIdx) {
+    return 0.0f;
+}
+glm::vec3 PCISPH::forceVis(unsigned int particleIdx) {
+    return glm::vec3(0);
+}
+glm::vec3 PCISPH::forceExt(unsigned int particleIdx) {
+    return glm::vec3(0);
+}
+glm::vec3 PCISPH::forceP(unsigned int particleIdx) {
+    return glm::vec3(0);
+}
+
+void PCISPH::__makeNCellMap(){
+    for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
+        occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
+
+        std::vector<unsigned int> fluidNCell;
+        std::vector<unsigned int> wallNCell;
+        __nCellSearch(&fluidNCell,&wallNCell,mortonDecode(*occCellIdxIter));
+
+        fluidNCellIdx[*occCellIdxIter] = fluidNCell;
+        wallNCellIdx[*occCellIdxIter] = wallNCell;
+        /* TEST
+        std::cout << "PCISPH::update() test neighborSearch" << std::endl;
+        std::cout << "current cellIdx : " << occCellIdx << " coord" << mortonDecode(occCellIdx).x << " : " << mortonDecode(occCellIdx).y << " : " << mortonDecode(occCellIdx).z << std::endl;
+        std::cout << std::endl << "fluidNCell" << std::endl;
+        for (auto ele : fluidNCell)
+            std::cout << ele << " : " << mortonDecode(ele).x << " : " << mortonDecode(ele).y << " : " << mortonDecode(ele).z << std::endl;
+        std::cout << std::endl << "wallNCell" << std::endl;
+        for (auto ele : wallNCell)
+            std::cout << ele << " : " << mortonDecode(ele).x << " : " << mortonDecode(ele).y << " : " << mortonDecode(ele).z << std::endl;
+        system("PAUSE");
+        */
+    }
+}
+void PCISPH::__nCellSearch(std::vector<unsigned int>* fluidNIdx, std::vector<unsigned int>* wallNIdx, glm::ivec3 center){
+    // 현재 cell에서 주변 cell에 particle이 있는지 보고.
+    // 있으면 vector에 넣어줄건데.
+    // 주변 cell에 있는 particle이 wall 인지, fluid인지 따로 넣어줄거임.
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            for (int k = -1; k <= 1; k++) {
+                glm::ivec3 steper = center + glm::ivec3(i, j, k);
+                int nCell = mortonEncode(steper.x, steper.y, steper.z);
+
+                if (nCell >= 0 && fluidParticlesSorter.particleCounter.count(nCell)) 
+                    fluidNIdx->push_back(nCell);
+                
+                if (nCell >= 0 && wallParticlesSorter.particleCounter.count(nCell)) 
+                    wallNIdx->push_back(nCell);
+                
+
+            }
+        }
+    }
+}
+
+
 
 //==================================================================================
 PCISPH::Z_Sort::Z_Sort() {
@@ -418,140 +562,10 @@ void PCISPH::Z_Sort::sortby(SORTMODE mode) {
     delete[] sortedIdx;
 }
 
-// fluidSorter를 이용해서 정렬을 한 다음 전체 particle을 만들기 위해 이 함수를 호출함.
-void PCISPH::Z_Sort::integrateSortedArr(Z_Sort wallSorter, Z_Sort fluidSorter,SORTMODE mode) {
-
-    currentMode = mode;
-
-    __integrateCounter(wallSorter, fluidSorter);
-
-    int* sortedIdx = __integrateSortedIdx(wallSorter,fluidSorter);
-
-    __integrate(wallSorter, fluidSorter, sortedIdx);
-
-
-    delete[] sortedIdx;
-}
-void PCISPH::Z_Sort::__integrateCounter(Z_Sort wallSorter, Z_Sort fluidSorter) {
-    //wallParticle과 fluidParticle의 hashMap합친다
-    particleCounter = wallSorter.particleCounter;
-
-    // mode에 따라서 cellIdx또는 cellIdxPred에 있는 particle의 갯수를 샘.
-    for (auto ele : fluidSorter.particleCounter) {
-        if (particleCounter.count(ele.first)) {
-            particleCounter[ele.first] += ele.second;
-        }
-        else
-            particleCounter[ele.first] = ele.second;
-    }
-
-    //occupiedCellIdx 만든다.
-    occupiedCellIdx.clear();
-    occupiedCellIdxInv.clear();
-
-    unsigned int occIdx = 0;
-    for (unsigned int i = 0; i <= maxCellIdx; i++) {
-        if (particleCounter.count(i)) {
-            occupiedCellIdx.push_back(i);
-            occupiedCellIdxInv[i] = occIdx++;
-        }
-    }
-
-}
-int* PCISPH::Z_Sort::__integrateSortedIdx(Z_Sort wallSorter, Z_Sort fluidSorter) {
-
-    int* sortIdxArr = new int[count];
-
-    std::vector<std::vector<int>> sortParticleIdx;
-       
-    for (unsigned int i = 0; i < occupiedCellIdx.size(); i++)
-        sortParticleIdx.push_back(std::vector<int>());
-
-    if (currentMode == ACTUAL_POS) {
-        for (unsigned int i = 0; i < wallSorter.count; i++) {
-            unsigned int idx = occupiedCellIdxInv[wallSorter.particleArr->cellIdx[i]];
-            sortParticleIdx[idx].push_back(i);
-        }
-        for (unsigned int i = 1; i < fluidSorter.count+1; i++) {
-            unsigned int idx = occupiedCellIdxInv[fluidSorter.particleArr->cellIdx[i]];
-            sortParticleIdx[idx].push_back(-1* i);
-        }
-    }
-    else if (currentMode == PRED_POS) {
-        for (unsigned int i = 0; i < wallSorter.count; i++) {
-            unsigned int idx = occupiedCellIdxInv[wallSorter.particleArr->cellIdxPred[i]];
-            sortParticleIdx[idx].push_back(i);
-        }
-        for (unsigned int i = 1; i < fluidSorter.count+1; i++) {
-            unsigned int idx = occupiedCellIdxInv[fluidSorter.particleArr->cellIdxPred[i]];
-            sortParticleIdx[idx].push_back(-1 * i);
-        }
-    }
-
-    unsigned int iii = 0;
-    for (auto iter = sortParticleIdx.begin(); iter != sortParticleIdx.end(); iter++) {
-        for (auto iteriter = iter->begin(); iteriter != iter->end(); iteriter++) {
-            sortIdxArr[iii] = *iteriter;
-            iii++;
-        }
-    }
-    return sortIdxArr;
-
-}
-void PCISPH::Z_Sort::__integrate(Z_Sort wallSorter, Z_Sort fluidSorter, int* sortedIdx) {
-    
-    for (unsigned int i = 0; i < count; i++) {
-        int curIdx = sortedIdx[i];
-        bool isFluid = (curIdx < 0);
-        if (isFluid) {
-            curIdx = -curIdx -1;
-
-            particleArr->isWall[i] = false;
-
-            particleArr->cellIdx[i] = fluidSorter.particleArr->cellIdx[curIdx];
-            particleArr->cellIdxPred[i] = fluidSorter.particleArr->cellIdxPred[curIdx];
-
-            particleArr->pressure[i] = fluidSorter.particleArr->pressure[curIdx];
-            particleArr->density[i] = fluidSorter.particleArr->density[curIdx];
-            particleArr->densityVar[i] = fluidSorter.particleArr->densityVar[curIdx];
-
-            particleArr->vel[i] = fluidSorter.particleArr->vel[curIdx];
-            particleArr->pos[i] = fluidSorter.particleArr->pos[curIdx];
-            particleArr->px[i] = fluidSorter.particleArr->px[curIdx];
-            particleArr->pv[i] = fluidSorter.particleArr->pv[curIdx];
-
-            particleArr->force_p[i] = fluidSorter.particleArr->force_p[curIdx];
-            particleArr->force_ext[i] = fluidSorter.particleArr->force_ext[curIdx];
-            particleArr->force_vis[i] = fluidSorter.particleArr->force_vis[curIdx];
-        }
-    }
-    for (unsigned int i = 0; i < count; i++) {
-        int curIdx = sortedIdx[i];
-
-        bool isFluid = (curIdx < 0);
-        if (!isFluid) {
-            particleArr->isWall[i] = true;
-
-            particleArr->cellIdx[i] = wallSorter.particleArr->cellIdx[curIdx];
-            particleArr->cellIdxPred[i] = wallSorter.particleArr->cellIdxPred[curIdx];
-
-            particleArr->pressure[i] = wallSorter.particleArr->pressure[curIdx];
-            particleArr->density[i] = wallSorter.particleArr->density[curIdx];
-            particleArr->densityVar[i] = wallSorter.particleArr->densityVar[curIdx];
-
-            particleArr->pos[i] = wallSorter.particleArr->pos[curIdx];
-            particleArr->px[i] = wallSorter.particleArr->px[curIdx];
-
-        }
-    }
-}
-
-
-
 void PCISPH::Z_Sort::__buildCounter() {
 
     particleCounter.clear();
-    
+
     if (currentMode == ACTUAL_POS) {
 
         for (unsigned int i = 0; i < particleArr->count; i++) {
@@ -586,13 +600,8 @@ void PCISPH::Z_Sort::__buildCounter() {
         }
     }
 
-
-    /* TODO 이거 나중에 neighbor search 할 때 필요함. 두개 합치기 전에는 이거를 하면 안됨.
-    for (auto iter = occupiedCellIdx.begin() + 1; iter != occupiedCellIdx.end(); iter++) {
-        particleCounter[*iter] += particleCounter[(*iter) - 1];
-    }
-    */
-
+    for (auto iter = occupiedCellIdx.begin() + 1; iter != occupiedCellIdx.end(); iter++)
+        particleCounter[*iter] += particleCounter[*(iter - 1) ];
 
 
 
@@ -794,3 +803,139 @@ void PCISPH::Z_Sort::__swapAndSort(ParticlesArray* temp, unsigned int* sortedIdx
 
     // 기존에 있었던 것 삭제하기.
 }
+
+
+
+
+//=========================================== integrate 필요 없음.
+/*
+
+// fluidSorter를 이용해서 정렬을 한 다음 전체 particle을 만들기 위해 이 함수를 호출함.
+void PCISPH::Z_Sort::integrateSortedArr(Z_Sort wallSorter, Z_Sort fluidSorter, SORTMODE mode) {
+
+    currentMode = mode;
+
+    __integrateCounter(wallSorter, fluidSorter);
+
+    int* sortedIdx = __integrateSortedIdx(wallSorter, fluidSorter);
+
+    __integrate(wallSorter, fluidSorter, sortedIdx);
+
+
+    delete[] sortedIdx;
+}
+void PCISPH::Z_Sort::__integrateCounter(Z_Sort wallSorter, Z_Sort fluidSorter) {
+    //wallParticle과 fluidParticle의 hashMap합친다
+    particleCounter = wallSorter.particleCounter;
+
+    // mode에 따라서 cellIdx또는 cellIdxPred에 있는 particle의 갯수를 샘.
+    for (auto ele : fluidSorter.particleCounter) {
+        if (particleCounter.count(ele.first)) {
+            particleCounter[ele.first] += ele.second;
+        }
+        else
+            particleCounter[ele.first] = ele.second;
+    }
+
+    //occupiedCellIdx 만든다.
+    occupiedCellIdx.clear();
+    occupiedCellIdxInv.clear();
+
+    unsigned int occIdx = 0;
+    for (unsigned int i = 0; i <= maxCellIdx; i++) {
+        if (particleCounter.count(i)) {
+            occupiedCellIdx.push_back(i);
+            occupiedCellIdxInv[i] = occIdx++;
+        }
+    }
+
+}
+int* PCISPH::Z_Sort::__integrateSortedIdx(Z_Sort wallSorter, Z_Sort fluidSorter) {
+
+    int* sortIdxArr = new int[count];
+
+    std::vector<std::vector<int>> sortParticleIdx;
+
+    for (unsigned int i = 0; i < occupiedCellIdx.size(); i++)
+        sortParticleIdx.push_back(std::vector<int>());
+
+    if (currentMode == ACTUAL_POS) {
+        for (unsigned int i = 0; i < wallSorter.count; i++) {
+            unsigned int idx = occupiedCellIdxInv[wallSorter.particleArr->cellIdx[i]];
+            sortParticleIdx[idx].push_back(i);
+        }
+        for (unsigned int i = 1; i < fluidSorter.count + 1; i++) {
+            unsigned int idx = occupiedCellIdxInv[fluidSorter.particleArr->cellIdx[i]];
+            sortParticleIdx[idx].push_back(-1 * i);
+        }
+    }
+    else if (currentMode == PRED_POS) {
+        for (unsigned int i = 0; i < wallSorter.count; i++) {
+            unsigned int idx = occupiedCellIdxInv[wallSorter.particleArr->cellIdxPred[i]];
+            sortParticleIdx[idx].push_back(i);
+        }
+        for (unsigned int i = 1; i < fluidSorter.count + 1; i++) {
+            unsigned int idx = occupiedCellIdxInv[fluidSorter.particleArr->cellIdxPred[i]];
+            sortParticleIdx[idx].push_back(-1 * i);
+        }
+    }
+
+    unsigned int iii = 0;
+    for (auto iter = sortParticleIdx.begin(); iter != sortParticleIdx.end(); iter++) {
+        for (auto iteriter = iter->begin(); iteriter != iter->end(); iteriter++) {
+            sortIdxArr[iii] = *iteriter;
+            iii++;
+        }
+    }
+    return sortIdxArr;
+
+}
+void PCISPH::Z_Sort::__integrate(Z_Sort wallSorter, Z_Sort fluidSorter, int* sortedIdx) {
+
+    for (unsigned int i = 0; i < count; i++) {
+        int curIdx = sortedIdx[i];
+        bool isFluid = (curIdx < 0);
+        if (isFluid) {
+            curIdx = -curIdx - 1;
+
+            particleArr->isWall[i] = false;
+
+            particleArr->cellIdx[i] = fluidSorter.particleArr->cellIdx[curIdx];
+            particleArr->cellIdxPred[i] = fluidSorter.particleArr->cellIdxPred[curIdx];
+
+            particleArr->pressure[i] = fluidSorter.particleArr->pressure[curIdx];
+            particleArr->density[i] = fluidSorter.particleArr->density[curIdx];
+            particleArr->densityVar[i] = fluidSorter.particleArr->densityVar[curIdx];
+
+            particleArr->vel[i] = fluidSorter.particleArr->vel[curIdx];
+            particleArr->pos[i] = fluidSorter.particleArr->pos[curIdx];
+            particleArr->px[i] = fluidSorter.particleArr->px[curIdx];
+            particleArr->pv[i] = fluidSorter.particleArr->pv[curIdx];
+
+            particleArr->force_p[i] = fluidSorter.particleArr->force_p[curIdx];
+            particleArr->force_ext[i] = fluidSorter.particleArr->force_ext[curIdx];
+            particleArr->force_vis[i] = fluidSorter.particleArr->force_vis[curIdx];
+        }
+    }
+    for (unsigned int i = 0; i < count; i++) {
+        int curIdx = sortedIdx[i];
+
+        bool isFluid = (curIdx < 0);
+        if (!isFluid) {
+            particleArr->isWall[i] = true;
+
+            particleArr->cellIdx[i] = wallSorter.particleArr->cellIdx[curIdx];
+            particleArr->cellIdxPred[i] = wallSorter.particleArr->cellIdxPred[curIdx];
+
+            particleArr->pressure[i] = wallSorter.particleArr->pressure[curIdx];
+            particleArr->density[i] = wallSorter.particleArr->density[curIdx];
+            particleArr->densityVar[i] = wallSorter.particleArr->densityVar[curIdx];
+
+            particleArr->pos[i] = wallSorter.particleArr->pos[curIdx];
+            particleArr->px[i] = wallSorter.particleArr->px[curIdx];
+
+        }
+    }
+}
+
+*/

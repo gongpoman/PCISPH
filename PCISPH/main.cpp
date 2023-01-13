@@ -91,9 +91,7 @@ int main(){
         std::cout << frame << " frame end=====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
-        std::cout << " =====================================================================================================================" << std::endl;
-        std::cout << " =====================================================================================================================" << std::endl;
-
+ 
     }
 
     std::cout << frame << "frames rendered" << std::endl;
@@ -208,8 +206,13 @@ void instanceMat() {
     const float rad = pcisph.radius;
 
     if (pcisph.drawWall) {
-        for (unsigned int i = 0; i < pcisph.numParticles; i++) {
-            instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.particles.pos[i]);
+        for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
+            instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
+            instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+            idx++;
+        }
+        for (unsigned int i = 0; i < pcisph.numWallParticles; i++) {
+            instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.wallParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
             idx++;
         }
@@ -249,7 +252,6 @@ void instanceMat() {
 //================================================================================
 //================================================================================
 //================================================================================
-
 
 /*
 float calcDelta(unsigned int particleIdx) {
@@ -376,10 +378,6 @@ glm::vec3 forceVis(unsigned int particleIdx) {
     return netForceVis;
 }
 
-glm::vec3 forceSurfaceTension(unsigned int particleIdx) {
-    return glm::vec3(0);
-}
-
 // ALTER
 glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
     const float kernelConst = 15.0f / 3.141592f / (coreRad * coreRad * coreRad * coreRad * coreRad * coreRad);
@@ -410,6 +408,10 @@ glm::vec3 forcePressureSpiky(unsigned int particleIdx) {
 
     return netForceP;
 }
+
+*/
+
+/*
 
 // TODO water particle에 대해서만 해야되는 놈인지, wall particle 까지 고려해야 하는 놈인지 cut을 잘 해야돼.
 void PCIupdate() {
@@ -613,21 +615,7 @@ void neighborSearch(unsigned int idx) {
         }
     }
 }
-void neighborSearchPred(unsigned int idx) {
 
-    for (unsigned int i = 0; i < neighborIdices[predParticles[idx].cellIdxPred].size(); i++) {
-        unsigned int cidx = neighborIdices[predParticles[idx].cellIdxPred][i];
-        if (predIdxMap.count(cidx) != 0) {
-            cidx = predIdxMap[cidx];
-            unsigned int startPoint = (cidx == 0) ? 0 : mortonCountPred[cidx - 1];
-            unsigned int endPoint = mortonCountPred[cidx];
-
-            for (unsigned int j = startPoint; j < endPoint; j++) {
-                neighbors->push_back(predParticles[j]);
-            }
-        }
-    }
-}
 
 void __cubeBoundaryCellIdx() {          // z indexing.에 맞도록 정렬을 하고, 정렬된 particles array에서 어느 idx부터 어디까지가 어떤 cellIdx를 가지는 particle인지 다 저장해 놓는 코드.
 
@@ -705,81 +693,5 @@ void __cubeBoundaryCellIdx() {          // z indexing.에 맞도록 정렬을 하고, 정�
 
     delete[] mortonCounter;
 }
-void __cubeBoundaryCellIdxPred() {          // z indexing.에 맞도록 정렬을 하고, 정렬된 particles array에서 어느 idx부터 어디까지가 어떤 cellIdx를 가지는 particle인지 다 저장해 놓는 코드.
 
-
-
-    predParticleIndices.clear();
-    mortonCountPred.clear(); // 어느 idx부터 d어느 idx까지.
-    predIdxMap.clear();
-
-    unsigned int* mortonCounter = new unsigned[upperNGridDiv * upperNGridDiv * upperNGridDiv]; // temp
-    unsigned int outBoundardyCount = 0;
-
-    for (unsigned int i = 0; i < upperNGridDiv * upperNGridDiv * upperNGridDiv; i++)
-        mortonCounter[i] = 0;
-
-
-    for (unsigned int i = 0; i < numParticle; i++) {
-        if (!particles[i].isWall) {
-            glm::ivec3 cellCoord = __cubeCellCoord(particles[i].px);
-
-            particles[i].cellIdxPred = __cubeMorton(cellCoord.x, cellCoord.y, cellCoord.z);
-
-            if (particles[i].cellIdxPred == (unsigned int)(-1)) {
-                outBoundardyCount++;
-                std::cout << "Pred CASE : " << i << "th particle" << std::endl;
-                std::cout << particles[i].px.x << " : " << particles[i].px.y << " : " << particles[i].px.z << std::endl;
-                std::cout << particles[i].pv.x << " : " << particles[i].pv.y << " : " << particles[i].pv.z << std::endl;
-
-            }
-            else
-                mortonCounter[particles[i].cellIdxPred]++;
-        }
-        else {
-            mortonCounter[particles[i].cellIdxPred]++;
-        }
-    }
-
-    if (outBoundardyCount > 0) {
-        std::cout << "out boundary particle : " << outBoundardyCount << std::endl;
-        system("PAUSE");
-    }
-
-    unsigned int invIdx = 0;
-
-
-    for (unsigned int i = 0; i < upperNGridDiv * upperNGridDiv * upperNGridDiv; i++)
-        if (mortonCounter[i] > 0) {
-            mortonCountPred.push_back(mortonCounter[i]);
-            predIdxMap.insert(std::pair<unsigned int, unsigned int>(i, invIdx++));              // morton code cell index를 넣어주면. 그 cell idx가 morton counter의 몇번째 index인지를 저장하는 map  
-        }
-
-    for (auto iter = mortonCountPred.begin() + 1; iter != mortonCountPred.end(); iter++)
-        *(iter) += *(iter - 1);
-
-    std::vector<std::vector<Particle>> tempParticles;
-    for (unsigned int i = 0; i < mortonCountPred.size(); i++)
-        tempParticles.push_back(std::vector<Particle>());
-
-    for (unsigned int i = 0; i < numParticle; i++) {
-        unsigned int idx = predIdxMap[particles[i].cellIdxPred];
-        tempParticles[idx].push_back(particles[i]);
-    }
-
-    unsigned int i = 0;
-
-    for (auto iter = tempParticles.begin(); iter != tempParticles.end(); iter++) {
-        for (auto iteriter = iter->begin(); iteriter != iter->end(); iteriter++) {
-            predParticles[i] = *iteriter;
-
-            if (!predParticles[i].isWall) {
-                predParticleIndices.push_back(i);
-            }
-            i++;
-        }
-    }
-
-    delete[] mortonCounter;
-}
 */
