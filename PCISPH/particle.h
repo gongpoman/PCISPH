@@ -23,6 +23,8 @@ class Particle {
 public:
 	bool isWall;
 
+	unsigned int pID;
+
 	unsigned int cellIdx;
 	glm::vec3 vel;
 	glm::vec3 pos;
@@ -56,12 +58,16 @@ public:
 		pressure = 0.0f;
 		density = 0.0f;
 		densityVar = 0.0f;
+
+		pID = 0;
 	}
 };
 
 struct ParticlesArray {
 	unsigned int count;	// 현재 몇개 particle 있는지.
 	unsigned int numMaxParticles; //최대 particle 갯수.
+
+	unsigned int *particleID;
 
 	bool *isWall;	// 이게 wall의 particle인지.
 
@@ -116,7 +122,6 @@ public:
 
 //		void integrateSortedArr(Z_Sort wallSorter, Z_Sort fluidSorter, SORTMODE mode);
 	private:
-
 		void __buildCounter();
 		unsigned int* __buildSortedIdx();
 		void __particlesArrInit(ParticlesArray* particleArr, unsigned int numbers, ARRTYPE arrtype);
@@ -157,7 +162,15 @@ public:
 	float boundaryY;
 	float boundaryZ;
 
+
+	//grid constant
+	unsigned int nGridDivX;
+	unsigned int nGridDivY;
+	unsigned int nGridDivZ;
+	unsigned int upperMaxGridDiv;
+
 	float coreRad;
+	float delta;
 
 	//std::vector<glm::ivec3>* neighborIdices;
 	float eta;
@@ -168,16 +181,13 @@ public:
 	~PCISPH();
 
 	void update();
+	void nSearchTest();
 
 private :
 
-	std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
-	std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
-
-
-//	std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdxPred;
-//	std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdxPred;
-
+	std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx, fluidPredNCellIdx;
+	std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx, wallPredNCellIdx;
+	
 	std::vector<Particle> brick;
 
 	//particle constant
@@ -189,18 +199,16 @@ private :
 	float sideLenZ;
 
 
-	//grid constant
-	unsigned int nGridDivX;
-	unsigned int nGridDivY;
-	unsigned int nGridDivZ;
-	unsigned int upperMaxGridDiv;
-
-
 
 	//vectors
 
-	glm::vec3 forceVis(unsigned int particleIdx);
-	glm::vec3 forceExt(unsigned int particleIdx);
+	glm::vec3 forceVis(unsigned int idx) {
+		return glm::vec3(0);
+	}
+	glm::vec3 forceExt(unsigned int idx) {
+		return glm::vec3(0);
+	}
+
 	glm::vec3 forceP(unsigned int particleIdx);
 	//scalers
 
@@ -210,13 +218,25 @@ private :
 
 
 	//update sequence
+
+	void __sortFluidParticles(SORTMODE);
+
 	void __makeNCellMap();
 	void __nCellSearch(std::vector<unsigned int>* fluidNIdx, std::vector<unsigned int>* wallNIdx, glm::ivec3);
+	void __makePredNCellMap();
 
 	void __initializeFrameStates();
 
-	void __pos_vel_Predict();
+	void __pos_vel_Predictive();
 	void __predOutGridResol(unsigned int i);
+
+	unsigned int __density_Predictive();
+
+	void __corrective();
+
+
+
+	void __calcDelta();
 
 	void __sceneInitialize();
 	void __brickInit();
@@ -235,8 +255,80 @@ private :
 
 
 
+	float W(float dist) {
+		float res = 0.0f;
+		const float q = dist / coreRad;
+		
+
+		const float m_k = 8.0f / (3.141592f * coreRad * coreRad * coreRad);
+
+		if (q <= 1.0f) {
+			
+			if (q <= 0.5f) {
+				const float q2 = q * q;
+				const float q3 = q * q * q;
+				res = m_k * (6.0f * q3 - 6.0f * q2 + 1.0f);
+			}
+			else {
+				res = m_k * (2.0f * std::pow(1.0f - q, 3));
+			}
+
+		}
+		return res;
+	}
+
+	glm::vec3 gradW(glm::vec3 dist) {
+
+		glm::vec3 res;
+		const float rl = glm::length(dist);
+		const float  q = rl / coreRad;
+
+		const float m_l = 48.0f / (3.141592f * coreRad * coreRad * coreRad);
+
+		if ((rl > 1.0e-7) && (q <= 1.0))
+		{
+			glm::vec3 gradq = dist / rl;
+			gradq /= coreRad;
+			if (q <= 0.5)
+			{
+				res = m_l * q * (3.0f * q - 2.0f) * gradq;
+			}
+			else
+			{
+				const float factor = 1.0f - q;
+				res = m_l * (-factor * factor) * gradq;
+			}
+		}
+		else
+			res = glm::vec3(0);
+
+		return res;
+	}
+
 
 
 };
 
 
+
+
+/*
+   int a[1000] = { 0 };
+   int temp = 0;
+
+
+   a[idx] += 1;
+   temp++;
+
+
+   bool chkFlag = false;
+   for (int tempidx = 0; tempidx < 1000; tempidx++) {
+	   if (a[tempidx] != 1) {
+		   std::cout << "tempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdxtempIdx : " << tempidx << std::endl;
+		   chkFlag = true;
+	   }
+   }
+
+   std::cout << temp << std::endl;
+   system("PAUSE");
+   */

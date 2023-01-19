@@ -134,3 +134,5 @@ uint32_t DecodeMorton3Z(uint32_t code)
 glm::ivec3 mortonDecode(unsigned int morton) {
     return glm::ivec3(DecodeMorton3X(morton), DecodeMorton3Y(morton), DecodeMorton3Z(morton));
 }
+
+
