@@ -24,15 +24,26 @@ void instanceMat();
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
 
-extern Camera cam(glm::vec3(0.0f, 1.0f,3.0f));
-//extern Camera cam(glm::vec3(0.0f, 0.4f, 0.85f));
+//extern Camera cam(glm::vec3(0.15f, 0.15f, 0.15f));
+extern Camera cam(glm::vec3(0.0f, 1.0f, 3.0f));
+//extern Camera cam(glm::vec3(0.85f, 0.4f, 0.85f));
 
-PCISPH pcisph(glm::ivec3(10,10,10),glm::vec3(1.5f,1.0f,1.5f), false);
+const float NGRIDX = 14.0f;
+const float NGRIDY = 17.0f;
+const float NGRIDZ = 14.0f;
+
+PCISPH pcisph(glm::ivec3(12, 12, 12), glm::vec3( NGRIDX * 0.075f ,NGRIDY*0.075f,NGRIDZ*0.075f), false);
+
+
+//PCISPH pcisph(glm::ivec3(1, 1, 1), glm::vec3(0.4f, 0.4f, 0.4f), true);
 
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
-extern const float deltaTime = 1/240.0f;
+bool mouseEnabel = false;
+bool keyboardEnable = false;
+
+extern const float deltaTime = 1/180.0f;
 
 glm::mat4* instWorlds; 
 
@@ -81,8 +92,12 @@ int main(){
 
         ////////////render 
         particleShader->use();
-//        glm::mat4 viewMat = cam.getViewMatrix();
-//        glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
+        
+        if (keyboardEnable) {
+            glm::mat4 viewMat = cam.getViewMatrix();
+            glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
+        }
+
         for (unsigned int i = 0; i < sphere->meshes.size(); i++) {
             glBindVertexArray(sphere->meshes[i].VAO);
             glDrawElementsInstanced(GL_TRIANGLES, sphere->meshes[i].indices.size(), GL_UNSIGNED_INT, 0, pcisph.numDrawParticles);
@@ -140,9 +155,10 @@ GLFWwindow* glInitialize() {
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-
-    //    glfwSetCursorPosCallback(window, mouse_callback);
-    //    glfwSetScrollCallback(window, scroll_callback);
+    if (mouseEnabel) {
+        glfwSetCursorPosCallback(window, mouse_callback);
+        glfwSetScrollCallback(window, scroll_callback);
+    }
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     return window;
@@ -208,7 +224,7 @@ std::tuple < Shader*, Model*, unsigned int > renderInitialize() {
 void instanceMat() {
 
     int idx = 0;
-    const float rad = pcisph.radius;
+    const float rad = pcisph.radius * 0.95f;
 
     if (pcisph.drawWall) {
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {

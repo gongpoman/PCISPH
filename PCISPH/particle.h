@@ -156,6 +156,8 @@ public:
 	float restDensity;
 	float radius;
 	float particleMass;
+	float wallMassRatio;
+	int numBrickRow;
 
 	//grid constant
 	float boundaryX;
