@@ -246,10 +246,10 @@ private :
 	void __sorterInit(); // Z_sort 선언. particles이거 비어있는데 이거 build하기.
 
 	void __addWallParticles(glm::vec3);
+	void __brickDensityModificationInnerCorner(Particle*);
 	void __particleInit(int mode);
 
 	glm::ivec3 __getCellCoord(glm::vec3);
-	glm::vec3 __gridLocalPos(glm::vec3 pos);
 
 	void __particlesArrInit(ParticlesArray*,unsigned int numbers,ARRTYPE arrtype);
 	void __appendParticle(ParticlesArray*, Particle, ARRTYPE arrtype);

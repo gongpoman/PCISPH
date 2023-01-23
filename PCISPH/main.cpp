@@ -28,11 +28,9 @@ extern const unsigned int SCR_HEIGHT = 720;
 extern Camera cam(glm::vec3(0.0f, 1.0f, 3.0f));
 //extern Camera cam(glm::vec3(0.85f, 0.4f, 0.85f));
 
-const float NGRIDX = 14.0f;
-const float NGRIDY = 17.0f;
-const float NGRIDZ = 14.0f;
+const int CUBICNUM = 10;
 
-PCISPH pcisph(glm::ivec3(12, 12, 12), glm::vec3( NGRIDX * 0.075f ,NGRIDY*0.075f,NGRIDZ*0.075f), false);
+PCISPH pcisph(CUBICNUM* glm::ivec3(1), glm::vec3(0.9f, 1.2f, 0.9f), false);
 
 
 //PCISPH pcisph(glm::ivec3(1, 1, 1), glm::vec3(0.4f, 0.4f, 0.4f), true);
@@ -40,18 +38,19 @@ PCISPH pcisph(glm::ivec3(12, 12, 12), glm::vec3( NGRIDX * 0.075f ,NGRIDY*0.075f,
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
-bool mouseEnabel = false;
-bool keyboardEnable = false;
+bool mouseEnabel = true ;
+bool keyboardEnable = true;
 
-extern const float deltaTime = 1/180.0f;
+extern const float deltaTime = 1/240.0f;
 
 glm::mat4* instWorlds; 
+float* instDen;
 
 
 GLFWwindow* glInitialize();
 void initialStateLog();
 
-std::tuple<Shader*,Model*,unsigned int> renderInitialize();
+std::tuple<Shader*,Model*, unsigned int, unsigned int> renderInitialize();
 
 int main(){
     
@@ -63,13 +62,16 @@ int main(){
         return -1;
 
     instWorlds = new glm::mat4[pcisph.numDrawParticles];
+    instDen = new float[pcisph.numDrawParticles];
     instanceMat();
 
     //particle render setting
     Shader* particleShader;
     Model* sphere;
     unsigned int instVBO;
-    std::tie(particleShader, sphere,instVBO) = renderInitialize();
+    unsigned int instDenVBO;
+    std::tie(particleShader, sphere,instVBO,instDenVBO) = renderInitialize();
+
 
     // print scean Log
     initialStateLog();
@@ -98,6 +100,7 @@ int main(){
             glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
         }
 
+        // DRAW CALL
         for (unsigned int i = 0; i < sphere->meshes.size(); i++) {
             glBindVertexArray(sphere->meshes[i].VAO);
             glDrawElementsInstanced(GL_TRIANGLES, sphere->meshes[i].indices.size(), GL_UNSIGNED_INT, 0, pcisph.numDrawParticles);
@@ -118,6 +121,7 @@ int main(){
 
     //global variables 
     delete[] instWorlds;
+    delete[] instDen;
     // local variables
     delete sphere;
     delete particleShader;
@@ -176,7 +180,7 @@ void initialStateLog() {
     std::cout << "========================================" << std::endl;
     system("PAUSE");
 }
-std::tuple < Shader*, Model*, unsigned int > renderInitialize() {
+std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
 
     Shader* particleShader = new Shader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
     Model* sphere = new Model("resources/objects/sphere.obj");
@@ -192,6 +196,8 @@ std::tuple < Shader*, Model*, unsigned int > renderInitialize() {
     glUseProgram(0);
 
     unsigned int instVBO;
+
+    unsigned int instDenVBO; //#Density CHECK
 
     for (unsigned int i = 0; i < sphere->meshes.size(); i++) {  // Definitely, sphere->meshes.size() = 1
 
@@ -215,10 +221,20 @@ std::tuple < Shader*, Model*, unsigned int > renderInitialize() {
         glVertexAttribDivisor(5, 1);
         glVertexAttribDivisor(6, 1);
 
+
+        glGenBuffers(1, &instDenVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, instDenVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * pcisph.numDrawParticles,&instDen[0], GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
+
+        glVertexAttribDivisor(2, 1);
+
+
         glBindVertexArray(0);
     }
 
-    return { particleShader,sphere,instVBO };
+    return { particleShader,sphere,instVBO,instDenVBO };
 }
 
 void instanceMat() {
@@ -230,11 +246,17 @@ void instanceMat() {
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+
+            instDen[idx] = pcisph.fluidParticles.density[i];
+
             idx++;
         }
         for (unsigned int i = 0; i < pcisph.numWallParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.wallParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+
+            instDen[idx] = pcisph.wallParticles.density[i];
+
             idx++;
         }
     }
@@ -242,6 +264,9 @@ void instanceMat() {
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
+
+            instDen[idx] = pcisph.fluidParticles.density[i];
+
             idx++;
 
         }

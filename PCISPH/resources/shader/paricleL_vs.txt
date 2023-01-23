@@ -2,6 +2,7 @@
 
 layout(location=0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
+layout (location = 2) in float aDensity;
 layout(location=3) in mat4 instanceWorld;
 
 out vec3 FragPos;
@@ -9,6 +10,7 @@ out vec3 Normal;
 out vec3 LightPos;
 
 out float height;
+out float density;
 
 uniform vec3 lightPos;
 uniform mat4 proj,view;
@@ -20,6 +22,7 @@ void main(){
 	LightPos = vec3(view * vec4(lightPos, 1.0));
 	
 	height =  (instanceWorld * vec4(aPos,1.0f)).y;
+	density = aDensity;
 
 
 }

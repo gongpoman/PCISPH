@@ -6,6 +6,7 @@ in vec3 FragPos;
 in vec3 Normal;
 in vec3 LightPos;
 in float height;
+in float density;
 
 
 void main(){
@@ -13,10 +14,14 @@ void main(){
 	vec3 objectColor = vec3(0.4, 0.4 ,1);
 
 	if(height>0.5f){
-		objectColor = vec3(0.2, 0.2 ,0.8);
+		objectColor = vec3(0.5, 0.5 ,0.8);
 	}
 	if(height>1.0f){
-		objectColor = vec3(0.4, 0.2,0.2);
+		objectColor = vec3(0.3, 0.3,0.6);
+	}
+
+	if(density>562.313f - 0.001f && density<562.313f + 0.001f ){
+		objectColor = vec3(1.0,0.0,0.0);
 	}
 
 
@@ -38,7 +43,7 @@ void main(){
 	
 	
 	vec3 result = (ambient + diffuse + specular) * objectColor;
-
+	
     	FragColor = vec4(result, 1.0f);
 	
 
