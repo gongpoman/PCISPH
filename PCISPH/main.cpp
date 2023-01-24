@@ -25,12 +25,12 @@ extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
 
 //extern Camera cam(glm::vec3(0.15f, 0.15f, 0.15f));
-extern Camera cam(glm::vec3(0.0f, 1.0f, 3.0f));
+extern Camera cam(glm::vec3(0.0f,0.5f, 2.0f));
 //extern Camera cam(glm::vec3(0.85f, 0.4f, 0.85f));
 
-const int CUBICNUM = 10;
+const int CUBICNUM = 12;
 
-PCISPH pcisph(CUBICNUM* glm::ivec3(1), glm::vec3(0.9f, 1.2f, 0.9f), false);
+PCISPH pcisph( glm::ivec3(20,13,20), glm::vec3(2.0f, 1.5f, 2.0f), false);
 
 
 //PCISPH pcisph(glm::ivec3(1, 1, 1), glm::vec3(0.4f, 0.4f, 0.4f), true);
@@ -38,8 +38,8 @@ PCISPH pcisph(CUBICNUM* glm::ivec3(1), glm::vec3(0.9f, 1.2f, 0.9f), false);
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
-bool mouseEnabel = true ;
-bool keyboardEnable = true;
+bool mouseEnabel = false;
+bool keyboardEnable = false;
 
 extern const float deltaTime = 1/240.0f;
 
@@ -240,7 +240,7 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
 void instanceMat() {
 
     int idx = 0;
-    const float rad = pcisph.radius * 0.95f;
+    const float rad = pcisph.radius ;
 
     if (pcisph.drawWall) {
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {

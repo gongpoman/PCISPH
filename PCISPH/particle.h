@@ -281,6 +281,7 @@ private :
 
 	glm::vec3 gradW(glm::vec3 dist) {
 
+
 		glm::vec3 res;
 		const float rl = glm::length(dist);
 		const float  q = rl / coreRad;

@@ -59,14 +59,10 @@ PCISPH::PCISPH(glm::ivec3 numOfFluidParticles, glm::vec3 boundarySideLen,bool dr
 
 	__sceneInitialize();
 }
-void PCISPH::__sceneInitialize() {
+void PCISPH::__sceneInitialize()  {
 	__brickInit();
-
 	__gridInit();
-
     __particleInit(1);
-
-
     __sorterInit();
     __calcDelta();
 }
@@ -148,8 +144,8 @@ void PCISPH::__gridInit()  {
         }
     }
 
-    numWallParticles = brick.size() * numBoundaryFull + numBoundaryHH * brick.size() / (numBrickRow * numBrickRow) + numBoundaryHHH * brick.size() / (numBrickRow * numBrickRow * numBrickRow); // determined number of boundary particle 
- //   numWallParticles = brick.size() * (numBoundaryFull + numBoundaryHH  + numBoundaryHHH); // determined number of boundary particle 
+ //   numWallParticles = brick.size() * numBoundaryFull + numBoundaryHH * brick.size() / (numBrickRow * numBrickRow) + numBoundaryHHH * brick.size() / (numBrickRow * numBrickRow * numBrickRow); // determined number of boundary particle 
+    numWallParticles = brick.size() * (numBoundaryFull + numBoundaryHH  + numBoundaryHHH); // determined number of boundary particle 
 
     numParticles = numWallParticles + numFluidParticles;
     
@@ -193,7 +189,7 @@ void PCISPH::__particleInit(int mode) {
                     Particle tempParticle = Particle();
 
                     float x = boundaryX / 2.0f + sideLenX * (((float)i / (float)numFluidParticlesX) - 0.5f);
-                    float y = sideLenY/(float)numFluidParticlesY * j  + coreRad;
+                    float y = sideLenY/(float)numFluidParticlesY * j  + coreRad*1.0f;
                     float z = boundaryZ / 2.0f + sideLenZ * (((float)k / (float)numFluidParticlesZ) - 0.5f);
                     /*
                     x = 0.0f;
@@ -221,7 +217,7 @@ void PCISPH::__particleInit(int mode) {
 
 
                     float x = sideLenX * ((float)i / (float)numFluidParticlesX) + coreRad + 1e-5;
-                    float y = sideLenY / (float)numFluidParticlesY * j +coreRad;
+                    float y = sideLenY / (float)numFluidParticlesY * j +coreRad * 1.0f;
                     float z = sideLenZ * ((float)k / (float)numFluidParticlesZ) + coreRad + 1e-5;
 
                     tempParticle.pos = glm::vec3(x, y, z);
@@ -248,14 +244,6 @@ void PCISPH::__particleInit(int mode) {
     }
 
 }
-
-
-
-
-
-
-
-
 
 void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
 
@@ -294,7 +282,7 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
     else if ((std::abs(BXFLAG) + std::abs(BYFLAG) + std::abs(BZFLAG)) == 2) {        // 두 면
 
         for (unsigned int i = 0; i < brick.size(); i++) {
-
+            /*
             if (BXFLAG == 1 && tempBrick[i].pos.x > 10e-5)
                 continue;
             if (BXFLAG == -1 && tempBrick[i].pos.x < coreRad * ((float)(numBrickRow - 1)) / ((float)numBrickRow) - 10e-5)
@@ -309,7 +297,7 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
                 continue;
             if (BZFLAG == -1 && tempBrick[i].pos.z < coreRad * ((float)(numBrickRow - 1)) / ((float)numBrickRow) - 10e-5)
                 continue;
-            
+            */
 
             tempBrick[i].pos += cellOrigin;
             tempBrick[i].px = tempBrick[i].pos;
@@ -319,18 +307,9 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
             tempBrick[i].cellIdxPred = tempBrick[i].cellIdx;
 
             //////////////////////////////
-            tempBrick[i].densityVar = wallMassRatio * 0.8f;
+            tempBrick[i].densityVar = wallMassRatio * 0.75f;
 
-            /*
-            // TODO 이런 느낌으로 조건부로 density 높게 줄수도 있고. 이부분이 중요함. 이것의 주변까지도. 밀도를 연속적으로 낮게 해줄 필요가 있어보임.
-            if (tempBrick[i].pos.y < coreRad * 2.1f)
-                tempBrick[i].densityVar = 0.5f;
-            else
-                tempBrick[i].densityVar = 0.5;
             //////////////////////////////
-
-            tempBrick[i].densityVar = wallMassRatio;
-            */
 
             tempBrick[i].density = tempBrick[i].densityVar * restDensity;
             __appendParticle(&wallParticles, tempBrick[i], WALL);
@@ -339,9 +318,9 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
 
     }
     else if ((std::abs(BXFLAG) + std::abs(BYFLAG) + std::abs(BZFLAG)) == 3) {  // 세 면
-
+       
         for (unsigned int i = 0; i < brick.size(); i++) {
-            
+            /*
             if (BXFLAG == 1 && tempBrick[i].pos.x > 10e-5)
                 continue;
             if (BXFLAG == -1 && tempBrick[i].pos.x < coreRad * ((float)(numBrickRow - 1)) / ((float)numBrickRow) - 10e-5)
@@ -356,7 +335,7 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
                 continue;
             if (BZFLAG == -1 && tempBrick[i].pos.z < coreRad * ((float)(numBrickRow - 1)) / ((float)numBrickRow) - 10e-5)
                 continue;
-            
+            */
             tempBrick[i].pos += cellOrigin;
             tempBrick[i].px = tempBrick[i].pos;
 
@@ -366,7 +345,7 @@ void PCISPH::__addWallParticles(glm::vec3 cellOrigin) {
 
 
             //////////////////////////////////////////s
-            tempBrick[i].densityVar = wallMassRatio * 0.8f;//구석은 큰 의미 없는듯... 최대한 가까워봤자. 거의 2root2 r 이라서.
+            tempBrick[i].densityVar = wallMassRatio*0.65f;//구석은 큰 의미 없는듯... 최대한 가까워봤자. 거의 2root2 r 이라서.
             //////////////////////////////////////////
 
             tempBrick[i].density = tempBrick[i].densityVar * restDensity;
@@ -384,8 +363,8 @@ void PCISPH::__brickDensityModificationInnerCorner(Particle* brick) {
     const float firstPos = 10e-6;
     const float lastPos = coreRad * ((float)(numBrickRow - 1) / (float)numBrickRow) - 10e-6;
 
-    const float smallerDensity = wallMassRatio * 0.7f;       // 한 면인데 겹쳐서 고려되는 곳/ xz 평면 아닌 것.
-    const float smallDensity = wallMassRatio * 0.8f;        // 한 면인데 겹쳐서 고려되는 곳/ xz 평면 평행
+    const float smallerDensity = wallMassRatio * 0.75 ;       // 한 면인데 겹쳐서 고려되는 곳/ xz 평면 아닌 것.
+    const float smallDensity = wallMassRatio * 0.8;        // 한 면인데 겹쳐서 고려되는 곳/ xz 평면 평행
 
     // cellCoord를 받아서 condition을 만들어 낼 수 있음.    
 
@@ -453,84 +432,6 @@ void PCISPH::__brickDensityModificationInnerCorner(Particle* brick) {
         brick->densityVar = smallDensity;
 }
 glm::vec3 PCISPH::forceP(unsigned int idx) {
-    /*
-    const glm::vec3 pos = fluidParticles.pos[idx];
-    const unsigned int cIdx = fluidParticles.cellIdx[idx];
-    glm::vec3 netForceP = glm::vec3(0);
-
-
-    const float dens = fluidParticles.density[idx];
-    const float pres = fluidParticles.density[idx];
-
-
-    for (auto nCellIdx : fluidNCellIdx[cIdx]) {
-
-        const unsigned int endIdx = fluidParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = fluidParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0
-            : fluidParticlesSorter.particleCounter[fluidParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 dist = fluidParticles.pos[i] - pos;
-            const glm::vec3 grad_Wp = gradW(dist);
-
-            const float nD = fluidParticles.density[i];
-            const float nP = fluidParticles.pressure[i];
-
-            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
-            //const float coef = particleMass * particleMass * 2.0f * pres / dens / dens;
-
-
-            netForceP += coef * grad_Wp;
-        }
-    }
-    for (auto nCellIdx : wallNCellIdx[cIdx]) {
-
-        const unsigned int endIdx = wallParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = wallParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0
-            : wallParticlesSorter.particleCounter[wallParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 dist = wallParticles.pos[i] - pos;
-            const glm::vec3 grad_Wp = gradW(dist);
-
-            const float nD = wallParticles.density[i];
-            const float nP = wallParticles.pressure[i];
-
-            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
-            //const float coef = particleMass * particleMass * 2.0f * pres / dens / dens;
-
-            netForceP += coef * grad_Wp;
-            }
-    }
-
-    /*
-    if (glm::length(netForceP) > 100000.f) {
-
-        for (auto nCellIdx : fluidNCellIdx[cIdx]) {
-
-            const unsigned int endIdx = fluidParticlesSorter.particleCounter[nCellIdx];
-
-            const int occIdx = fluidParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-            const unsigned int startIdx = (occIdx < 0) ? 0
-                : fluidParticlesSorter.particleCounter[fluidParticlesSorter.occupiedCellIdx[occIdx]];
-
-            for (unsigned int i = startIdx; i < endIdx; i++) {
-
-                const glm::vec3 dist = fluidParticles.pos[i] - pos;
-                const glm::vec3 grad_Wp = gradW(dist);
-                if (glm::length(grad_Wp) > 100000.f)
-                std::cout << glm::length(grad_Wp) << std::endl;
-            }
-        }
-
-    }
-        */
 
     const glm::vec3 pos = fluidParticles.px[idx];
     const unsigned int cIdx = fluidParticles.cellIdxPred[idx];
@@ -559,13 +460,13 @@ glm::vec3 PCISPH::forceP(unsigned int idx) {
 
             const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
 
+
             netForceP += coef * grad_Wp;
         }
     }
 
-    //////////////////////
-
     glm::vec3 tempWallForce = glm::vec3(0);
+
 
     for (auto nCellIdx : wallPredNCellIdx[cIdx]) {
 
@@ -579,19 +480,17 @@ glm::vec3 PCISPH::forceP(unsigned int idx) {
 
             const glm::vec3 dist = wallParticles.px[i] - pos;
             const glm::vec3 grad_Wp = gradW(dist);
-            /*
-            const float nD = wallParticles.density[i];
-            const float nP = wallParticles.pressure[i];
-
-            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
-            */
 
             //const float coef = wallParticles.densityVar[i] * wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
-            const float coef = wallParticles.densityVar[i] * wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
+            
+            //const float coef =  wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
+            
+            //const float coef = wallMassRatio * wallMassRatio * particleMass * particleMass * pres / dens / dens;
+            const float coef =wallMassRatio * particleMass * particleMass * pres / dens / dens;
+            //const float coef = particleMass * particleMass * pres / dens / dens;
 
-            tempWallForce += coef * grad_Wp;
+            tempWallForce +=  coef * grad_Wp; 
 
-            //netForceP += coef * grad_Wp;
         }
     }
 
@@ -635,11 +534,6 @@ glm::vec3 PCISPH::forceP(unsigned int idx) {
     */
 
 }
-
-
-
-
-
 
 glm::ivec3 PCISPH::__getCellCoord(glm::vec3 position) {
 
@@ -1057,27 +951,37 @@ void PCISPH::__corrective() {
         unsigned int endIdx = fluidParticlesSorter.particleCounter[*occCellIdxIter];    // 현재 Cell에 fluid particle들이 fluidParticleArr에 정렬되어있음. 그 곳의 마지막 위치.
         unsigned int startIdx = (occCellIdxIter == fluidParticlesSorter.occupiedCellIdx.begin()) ? 0 : fluidParticlesSorter.particleCounter[*(occCellIdxIter - 1)]; // 처음 위치
 
+        const glm::ivec3 curCellIdx = mortonDecode(*occCellIdxIter);
+
+        float dSmoothing = 1.0f; ;
+        int flag = 0;
+        if (curCellIdx.x <= 1 || curCellIdx.x >= nGridDivX - 2)
+            flag++;
+        if (curCellIdx.y <= 1 || curCellIdx.y >= nGridDivY - 2)
+            flag++;
+        if (curCellIdx.z <= 1 || curCellIdx.z >= nGridDivZ - 2)
+            flag++;
+
+        if (flag == 2)
+            dSmoothing = 0.36f;//9.0f * 9.0f / 15.0f/15.0f;
+        else if(flag==3)
+            dSmoothing = 0.22f;// 9.0f * 9.0f / 19.0f / 19.0f;
+
         for (unsigned int idx = startIdx; idx < endIdx; idx++) {
 
-
-            if (fluidParticles.densityVar[idx] < FLT_EPSILON ) // && false
+            if (fluidParticles.densityVar[idx] < FLT_EPSILON  ) { // && false
                 fluidParticles.pressure[idx] = 0.0f;
+            }
             else {
+                
+                float smoothingConst = (1.0f - fluidParticles.densityVar[idx] / restDensity);
+                smoothingConst = 0.5f * std::pow(smoothingConst,5.0f) + 0.5f;
 
-
-                float smoothingConst = (1.0f - std::abs(fluidParticles.densityVar[idx]) / restDensity);
-
-
-                //smoothingConst = std::pow(smoothingConst, 10.0f);
-
-                smoothingConst = 0.7f * std::pow(smoothingConst, 5.0f) + 0.3f;
-
-//                smoothingConst = (1.0f - fluidParticles.densityVar[idx] / restDensity);
-
-
-                fluidParticles.pressure[idx] += smoothingConst * delta * fluidParticles.densityVar[idx];//1번
+                fluidParticles.pressure[idx] +=  dSmoothing * delta * fluidParticles.densityVar[idx];//1번
                 fluidParticles.pressure[idx] = std::max(fluidParticles.pressure[idx], 0.0f);
                 
+                
+
             }
 
             
@@ -1091,13 +995,30 @@ void PCISPH::__corrective() {
         unsigned int endIdx = fluidParticlesSorter.particleCounter[*occCellIdxIter];    // 현재 Cell에 fluid particle들이 fluidParticleArr에 정렬되어있음. 그 곳의 마지막 위치.
         unsigned int startIdx = (occCellIdxIter == fluidParticlesSorter.occupiedCellIdx.begin()) ? 0 : fluidParticlesSorter.particleCounter[*(occCellIdxIter - 1)]; // 처음 위치
 
+        const glm::ivec3 curCellIdx = mortonDecode(*occCellIdxIter);
+
+        float dSmoothing = 1.0f;
+        int flag = 0;
+        if (curCellIdx.x <= 1 || curCellIdx.x >= nGridDivX - 2)
+            flag++;
+        if (curCellIdx.y <= 1 || curCellIdx.y >= nGridDivY - 2)
+            flag++;
+        if (curCellIdx.z <= 1 || curCellIdx.z >= nGridDivZ - 2)
+            flag++;
+        if (flag == 2)
+            dSmoothing = 0.85f;
+        else if (flag == 3)
+            dSmoothing = 0.8f;
+
         for (unsigned int idx = startIdx; idx < endIdx; idx++) {
 
+            //float smoothingConst = (1.0f - std::abs(fluidParticles.densityVar[idx]) / restDensity);
+            const float dv = fluidParticles.densityVar[idx] /0.1f/restDensity;
+            float smoothingConst = (dv >FLT_EPSILON)? 0.3f + 0.4f *dv : 0.3f;
+            smoothingConst = (smoothingConst > 1.0f) ? 1.0f : smoothingConst;
+            
 
-            float smoothingConst = (1.0f - std::abs(fluidParticles.densityVar[idx]) / restDensity);
-            smoothingConst = 0.5f * std::pow(smoothingConst, 3.0f) + 0.2f;
-
-            fluidParticles.force_p[idx] += smoothingConst*forceP(idx);
+            fluidParticles.force_p[idx] += dSmoothing*  forceP(idx);
             
             //fluidParticles.force_p[idx] = forceP(idx);
 
