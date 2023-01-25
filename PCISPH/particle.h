@@ -214,7 +214,6 @@ private :
 	glm::vec3 forceP(unsigned int particleIdx);
 	//scalers
 
-	float calcDelta(unsigned int particleIdx);
 	float calcDensity(unsigned int particleIdx);
 	float calcPredDensity(unsigned int particleIdx);
 
@@ -238,7 +237,6 @@ private :
 
 
 
-	void __calcDelta();
 
 	void __sceneInitialize();
 	void __brickInit();
@@ -248,6 +246,7 @@ private :
 	void __addWallParticles(glm::vec3);
 	void __brickDensityModificationInnerCorner(Particle*);
 	void __particleInit(int mode);
+	void __calcDelta();
 
 	glm::ivec3 __getCellCoord(glm::vec3);
 

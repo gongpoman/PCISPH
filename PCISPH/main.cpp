@@ -24,16 +24,11 @@ void instanceMat();
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
 
-//extern Camera cam(glm::vec3(0.15f, 0.15f, 0.15f));
-extern Camera cam(glm::vec3(0.0f,0.5f, 2.0f));
-//extern Camera cam(glm::vec3(0.85f, 0.4f, 0.85f));
-
-const int CUBICNUM = 12;
-
-PCISPH pcisph( glm::ivec3(20,13,20), glm::vec3(2.0f, 1.5f, 2.0f), false);
+extern Camera cam(glm::vec3(0.0f,0.5f, 4.0f));
 
 
-//PCISPH pcisph(glm::ivec3(1, 1, 1), glm::vec3(0.4f, 0.4f, 0.4f), true);
+PCISPH pcisph( glm::ivec3(25,16,25), glm::vec3(2.5f, 1.5f, 2.5f), false);
+
 
 extern float lastX, lastY;
 extern bool isFirstMove = true;
@@ -46,10 +41,8 @@ extern const float deltaTime = 1/240.0f;
 glm::mat4* instWorlds; 
 float* instDen;
 
-
 GLFWwindow* glInitialize();
 void initialStateLog();
-
 std::tuple<Shader*,Model*, unsigned int, unsigned int> renderInitialize();
 
 int main(){
@@ -81,7 +74,9 @@ int main(){
         frame++;
         std::cout<<frame <<" frame start=======================================================================================" << std::endl;
 
-        processInput(window);
+        if(keyboardEnable)
+            processInput(window);
+
         glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -113,16 +108,16 @@ int main(){
 
         std::cout << frame << " frame end=======================================================================================" << std::endl;
         std::cout << " =====================================================================================================================" << std::endl;
-        std::cout << " =====================================================================================================================" << std::endl;
  
     }
 
     std::cout << frame << "frames rendered" << std::endl;
 
-    //global variables 
+    //global
     delete[] instWorlds;
     delete[] instDen;
-    // local variables
+
+    // local 
     delete sphere;
     delete particleShader;
 
@@ -236,7 +231,6 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
 
     return { particleShader,sphere,instVBO,instDenVBO };
 }
-
 void instanceMat() {
 
     int idx = 0;

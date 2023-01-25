@@ -431,109 +431,6 @@ void PCISPH::__brickDensityModificationInnerCorner(Particle* brick) {
     if (CONDITION_XZ)
         brick->densityVar = smallDensity;
 }
-glm::vec3 PCISPH::forceP(unsigned int idx) {
-
-    const glm::vec3 pos = fluidParticles.px[idx];
-    const unsigned int cIdx = fluidParticles.cellIdxPred[idx];
-    glm::vec3 netForceP = glm::vec3(0);
-
-
-    const float dens = fluidParticles.density[idx];
-    const float pres = fluidParticles.pressure[idx];
-
-
-    for (auto nCellIdx : fluidPredNCellIdx[cIdx]) {
-
-        const unsigned int endIdx = fluidParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = fluidParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0
-            : fluidParticlesSorter.particleCounter[fluidParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 dist = fluidParticles.px[i] - pos;
-            const glm::vec3 grad_Wp = gradW(dist);
-
-            const float nD = fluidParticles.density[i];
-            const float nP = fluidParticles.pressure[i];
-
-            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
-
-
-            netForceP += coef * grad_Wp;
-        }
-    }
-
-    glm::vec3 tempWallForce = glm::vec3(0);
-
-
-    for (auto nCellIdx : wallPredNCellIdx[cIdx]) {
-
-        const unsigned int endIdx = wallParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = wallParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0
-            : wallParticlesSorter.particleCounter[wallParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 dist = wallParticles.px[i] - pos;
-            const glm::vec3 grad_Wp = gradW(dist);
-
-            //const float coef = wallParticles.densityVar[i] * wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
-            
-            //const float coef =  wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
-            
-            //const float coef = wallMassRatio * wallMassRatio * particleMass * particleMass * pres / dens / dens;
-            const float coef =wallMassRatio * particleMass * particleMass * pres / dens / dens;
-            //const float coef = particleMass * particleMass * pres / dens / dens;
-
-            tempWallForce +=  coef * grad_Wp; 
-
-        }
-    }
-
-    //////////////////////////////
-
-    return netForceP + tempWallForce;
-
-    /*
-
-    float smoothing=1.0f;
-    unsigned int smoothingCount = 0;
-    for (auto nCellIdx : wallPredNCellIdx[cIdx]) {
-
-        const unsigned int endIdx = wallParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = wallParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0
-            : wallParticlesSorter.particleCounter[wallParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 dist = wallParticles.px[i] - pos;
-            const glm::vec3 grad_Wp = gradW(dist);
-            if (grad_Wp != glm::vec3(0))
-                smoothingCount++;
-            /*
-            const float nD = wallParticles.density[i];
-            const float nP = wallParticles.pressure[i];
-
-            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
-            *
-
-            const float coef = particleMass * particleMass * pres / dens / dens;
-
-            netForceP += coef * grad_Wp;
-        }
-    }
-
-
-    return netForceP;
-    */
-
-}
 
 glm::ivec3 PCISPH::__getCellCoord(glm::vec3 position) {
 
@@ -843,6 +740,70 @@ void PCISPH::__initializeFrameStates() {
         }
     }
 }
+glm::vec3 PCISPH::forceP(unsigned int idx) {
+
+    const glm::vec3 pos = fluidParticles.px[idx];
+    const unsigned int cIdx = fluidParticles.cellIdxPred[idx];
+    glm::vec3 netForceP = glm::vec3(0);
+
+
+    const float dens = fluidParticles.density[idx];
+    const float pres = fluidParticles.pressure[idx];
+
+
+    for (auto nCellIdx : fluidPredNCellIdx[cIdx]) {
+
+        const unsigned int endIdx = fluidParticlesSorter.particleCounter[nCellIdx];
+
+        const int occIdx = fluidParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
+        const unsigned int startIdx = (occIdx < 0) ? 0
+            : fluidParticlesSorter.particleCounter[fluidParticlesSorter.occupiedCellIdx[occIdx]];
+
+        for (unsigned int i = startIdx; i < endIdx; i++) {
+
+            const glm::vec3 dist = fluidParticles.px[i] - pos;
+            const glm::vec3 grad_Wp = gradW(dist);
+
+            const float nD = fluidParticles.density[i];
+            const float nP = fluidParticles.pressure[i];
+
+            const float coef = particleMass * particleMass * (nP / nD / nD + pres / dens / dens);
+
+            netForceP += coef * grad_Wp;
+        }
+    }
+
+
+
+    for (auto nCellIdx : wallPredNCellIdx[cIdx]) {
+
+        const unsigned int endIdx = wallParticlesSorter.particleCounter[nCellIdx];
+
+        const int occIdx = wallParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
+        const unsigned int startIdx = (occIdx < 0) ? 0
+            : wallParticlesSorter.particleCounter[wallParticlesSorter.occupiedCellIdx[occIdx]];
+
+        for (unsigned int i = startIdx; i < endIdx; i++) {
+
+            const glm::vec3 dist = wallParticles.px[i] - pos;
+            const glm::vec3 grad_Wp = gradW(dist);
+
+            //const float coef = wallParticles.densityVar[i] * wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
+            //const float coef = particleMass * particleMass * pres / dens / dens;
+            //const float coef =  wallParticles.densityVar[i] * particleMass * particleMass * pres / dens / dens;
+            //const float coef = wallMassRatio * wallMassRatio * particleMass * particleMass * pres / dens / dens;
+            const float coef = wallMassRatio * particleMass * particleMass * pres / dens / dens;
+
+            netForceP += coef * grad_Wp;
+
+        }
+    }
+
+    //////////////////////////////
+
+    return netForceP ;
+
+}
 
 
 void PCISPH::__pos_vel_Predictive() {
@@ -1028,64 +989,6 @@ void PCISPH::__corrective() {
     }
 
 }
-
-float PCISPH::calcDelta(unsigned int idx) {
-
-//    const glm::vec3 pos = fluidParticles.pos[idx];
-    const glm::vec3 pos = fluidParticles.pos[idx];
-    glm::vec3 sumOfGrad = glm::vec3(0);
-    float sum = 0.0f;
-
-    float beta = deltaTime * deltaTime * particleMass * particleMass * 2.0f / restDensity / restDensity;
-
-    //const unsigned int cIdx = fluidParticles.cellIdx[idx];
-    const unsigned int cIdx = fluidParticles.cellIdx[idx];
-
-    // fluid particles NEIGHBOR
-    for (auto nCellIdx : fluidNCellIdx[cIdx]) { // 각 이웃 cell에 대해서
-
-        const unsigned int endIdx = fluidParticlesSorter.particleCounter[nCellIdx];
-
-        const int occIdx = fluidParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        const unsigned int startIdx = (occIdx < 0) ? 0 : fluidParticlesSorter.particleCounter[fluidParticlesSorter.occupiedCellIdx[occIdx]];
-
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 grad = fluidParticles.pos[i] - pos;
-            sumOfGrad += gradW(grad);
-            sum += glm::dot(grad, grad);
-        }
-    }
-
-    for (auto nCellIdx : wallNCellIdx[cIdx]) {
-
-        unsigned int endIdx = wallParticlesSorter.particleCounter[nCellIdx];
-
-        int occIdx = wallParticlesSorter.occupiedCellIdxInv[nCellIdx] - 1;
-        unsigned int startIdx = (occIdx < 0) ? 0 : wallParticlesSorter.particleCounter[wallParticlesSorter.occupiedCellIdx[occIdx]];
-
-        // 그 cell안에 있는 모든 particle들에 대해서.
-        for (unsigned int i = startIdx; i < endIdx; i++) {
-
-            const glm::vec3 grad = wallParticles.pos[i] - pos;
-
-            sumOfGrad += gradW(grad);
-            sum += glm::dot(grad, grad);
-
-        }
-    }
-
-    if (sum <= FLT_EPSILON && sum >= -FLT_EPSILON)
-        return 0;
-
-    sum += glm::dot(sumOfGrad, sumOfGrad);
-    beta *= sum;
-    beta = 1.0f / beta;
-
-
-    return beta;
-}
-
 
 
 void PCISPH::__sortFluidParticles(SORTMODE mode) {
@@ -1406,7 +1309,6 @@ unsigned int* PCISPH::Z_Sort::__buildSortedIdx() {
     }
     return sortIdxArr;
 }
-
 
 void PCISPH::Z_Sort::__particlesArrInit(ParticlesArray* particleArr,unsigned int numbers,ARRTYPE arrtype) {
 
