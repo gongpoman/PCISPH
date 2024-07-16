@@ -1,7 +1,7 @@
 # PCISPH
 
 
-![Simulation Demo](https://github.com/gongpoman/PCISPH/raw/master/asdf.gif)
+![Simulation Demo](https://github.com/gongpoman/PCISPH/raw/master/Demo.gif)
 
 Developed in C++.
 
