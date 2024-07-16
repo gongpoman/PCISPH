@@ -24,7 +24,7 @@ void instanceMat();
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
 
-extern Camera cam(glm::vec3(0.0f,1.8f, 3.f));
+extern Camera cam(glm::vec3(0.0f,1.65f, 2.5f));
 
 
 //PCISPH pcisph(glm::ivec3(25, 16, 25), glm::vec3(2.5f, 1.5f, 2.5f), false);
