@@ -24,10 +24,11 @@ void instanceMat();
 extern const unsigned int SCR_WIDTH = 1280;
 extern const unsigned int SCR_HEIGHT = 720;
 
-extern Camera cam(glm::vec3(0.0f,0.5f, 4.0f));
+extern Camera cam(glm::vec3(0.0f,1.8f, 3.f));
 
 
-PCISPH pcisph( glm::ivec3(25,16,25), glm::vec3(2.5f, 1.5f, 2.5f), false);
+//PCISPH pcisph(glm::ivec3(25, 16, 25), glm::vec3(2.5f, 1.5f, 2.5f), false);
+PCISPH pcisph(glm::ivec3(10, 15, 20), glm::vec3(1.5f, 1.8f, 1.f), false);
 
 
 extern float lastX, lastY;
@@ -38,7 +39,7 @@ bool keyboardEnable = false;
 
 extern const float deltaTime = 1/240.0f;
 
-glm::mat4* instWorlds; 
+glm::mat4* instWorlds;
 float* instDen;
 
 GLFWwindow* glInitialize();
@@ -86,7 +87,6 @@ int main(){
         instanceMat();
         __mapBuffer(instVBO, instWorlds, pcisph.numDrawParticles* sizeof(glm::mat4));
 
-
         ////////////render 
         particleShader->use();
         
@@ -95,7 +95,9 @@ int main(){
             glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
         }
 
+        glUniform3f(glGetUniformLocation(particleShader->ID, "lightPos"), cam.position.x, cam.position.y, cam.position.z);
         // DRAW CALL
+        #pragma omp parallel for
         for (unsigned int i = 0; i < sphere->meshes.size(); i++) {
             glBindVertexArray(sphere->meshes[i].VAO);
             glDrawElementsInstanced(GL_TRIANGLES, sphere->meshes[i].indices.size(), GL_UNSIGNED_INT, 0, pcisph.numDrawParticles);
@@ -175,6 +177,7 @@ void initialStateLog() {
     std::cout << "========================================" << std::endl;
     system("PAUSE");
 }
+
 std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
 
     Shader* particleShader = new Shader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
@@ -183,7 +186,7 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
     cam.position += glm::vec3(pcisph.boundaryX / 2.0f, 0.0f, pcisph.boundaryZ / 2.0f);
 
     particleShader->use();
-    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f, 0.3f, 0.0f) + glm::vec3(pcisph.boundaryX / 2.0f, 0.0f, pcisph.boundaryZ / 2.0f), cam.up);
+    glm::mat4 viewMat = glm::lookAt(cam.position, glm::vec3(0.0f, 0.7f, 0.0f) + glm::vec3(pcisph.boundaryX / 2.0f, 0.0f, pcisph.boundaryZ / 2.0f), cam.up);
     glm::mat4 projMat = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "view"), 1, GL_FALSE, &viewMat[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(particleShader->ID, "proj"), 1, GL_FALSE, &projMat[0][0]);
@@ -193,6 +196,9 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
     unsigned int instVBO;
 
     unsigned int instDenVBO; //#Density CHECK
+
+    unsigned int instVelVBO;
+
 
     for (unsigned int i = 0; i < sphere->meshes.size(); i++) {  // Definitely, sphere->meshes.size() = 1
 
@@ -219,7 +225,10 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
 
         glGenBuffers(1, &instDenVBO);
         glBindBuffer(GL_ARRAY_BUFFER, instDenVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * pcisph.numDrawParticles,&instDen[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * pcisph.numDrawParticles, &instDen[0], GL_DYNAMIC_DRAW);
+
+
+
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
 

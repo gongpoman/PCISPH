@@ -47,7 +47,7 @@ PCISPH::PCISPH(glm::ivec3 numOfFluidParticles, glm::vec3 boundarySideLen,bool dr
 
 	upperMaxGridDiv = __nthDigit(upperMaxGridDiv);
 
-	eta = 0.01f;
+	eta = 0.03f;
 	minIter = 3;
 	maxIter = 30;
 
@@ -604,6 +604,7 @@ void PCISPH::update() {
         // pred Density calc 
         densityOverFlag = false;
         unsigned int overCount = __density_Predictive();
+        //if(overCount > 0)
         if(overCount > 0)
             densityOverFlag = true;
 
@@ -726,6 +727,7 @@ float PCISPH::calcDensity(unsigned int idx) {
 }
 void PCISPH::__initializeFrameStates() {
 
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -807,7 +809,7 @@ glm::vec3 PCISPH::forceP(unsigned int idx) {
 
 
 void PCISPH::__pos_vel_Predictive() {
-
+#pragma omp parallel for
     for (unsigned int i = 0; i < numFluidParticles; i++) {
 
         /*
@@ -879,6 +881,7 @@ unsigned int PCISPH::__density_Predictive() {
     // 현재 px, predIdx 기준. fluidParticleArr 정렬 돼 있음.
     unsigned int overThresholdCount = 0;
 
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -906,6 +909,8 @@ void PCISPH::__corrective() {
 
     /// actual density   
     /// delta for fluidParticles only
+
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -950,6 +955,7 @@ void PCISPH::__corrective() {
     }
      
     /// Pressure Force
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -994,17 +1000,21 @@ void PCISPH::__corrective() {
 void PCISPH::__sortFluidParticles(SORTMODE mode) {
 
     if (mode == ACTUAL_POS) {
+        #pragma omp parallel for
         for (unsigned int i = 0; i < numFluidParticles; i++) {
             glm::ivec3 cellCoord = __getCellCoord(fluidParticles.pos[i]);
             fluidParticles.cellIdx[i] = mortonEncode(cellCoord.x, cellCoord.y, cellCoord.z);
         }
+
         fluidParticlesSorter.sortby(ACTUAL_POS);
     }
     else if (mode == PRED_POS) {
+        #pragma omp parallel for
         for (unsigned int i = 0; i < numFluidParticles; i++) {
             glm::ivec3 cellCoord = __getCellCoord(fluidParticles.px[i]);
             fluidParticles.cellIdxPred[i] = mortonEncode(cellCoord.x, cellCoord.y, cellCoord.z);
         }
+
         fluidParticlesSorter.sortby(PRED_POS);
     }
 
@@ -1015,6 +1025,7 @@ void PCISPH::__makeNCellMap() {
     fluidNCellIdx.clear();  //std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
     wallNCellIdx.clear();   //std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
 
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
@@ -1064,6 +1075,7 @@ void PCISPH::__makePredNCellMap() {
     fluidPredNCellIdx.clear();  //std::unordered_map<unsigned int, std::vector<unsigned int>> fluidNCellIdx;
     wallPredNCellIdx.clear();   //std::unordered_map<unsigned int, std::vector<unsigned int>> wallNCellIdx;
 
+#pragma omp parallel for
     for (auto occCellIdxIter = fluidParticlesSorter.occupiedCellIdx.begin();
         occCellIdxIter != fluidParticlesSorter.occupiedCellIdx.end(); occCellIdxIter++) {
 
