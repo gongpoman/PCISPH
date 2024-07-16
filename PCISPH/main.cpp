@@ -31,20 +31,22 @@ extern Camera cam(glm::vec3(0.0f,1.8f, 3.f));
 PCISPH pcisph(glm::ivec3(10, 15, 20), glm::vec3(1.5f, 1.8f, 1.f), false);
 
 
+
 extern float lastX, lastY;
 extern bool isFirstMove = true;
 
 bool mouseEnabel = false;
 bool keyboardEnable = false;
 
-extern const float deltaTime = 1/240.0f;
+extern const float deltaTime = 1/180.0f;
 
 glm::mat4* instWorlds;
+glm::vec3* instVel;
 float* instDen;
 
 GLFWwindow* glInitialize();
 void initialStateLog();
-std::tuple<Shader*,Model*, unsigned int, unsigned int> renderInitialize();
+std::tuple<Shader*,Model*, unsigned int, unsigned int, unsigned int> renderInitialize();
 
 int main(){
     
@@ -57,6 +59,8 @@ int main(){
 
     instWorlds = new glm::mat4[pcisph.numDrawParticles];
     instDen = new float[pcisph.numDrawParticles];
+    instVel = new glm::vec3[pcisph.numDrawParticles];
+
     instanceMat();
 
     //particle render setting
@@ -64,8 +68,8 @@ int main(){
     Model* sphere;
     unsigned int instVBO;
     unsigned int instDenVBO;
-    std::tie(particleShader, sphere,instVBO,instDenVBO) = renderInitialize();
-
+    unsigned int instVelVBO;
+    std::tie(particleShader, sphere,instVBO,instDenVBO,instVelVBO) = renderInitialize();
 
     // print scean Log
     initialStateLog();
@@ -86,6 +90,7 @@ int main(){
 //        pcisph.nSearchTest();
         instanceMat();
         __mapBuffer(instVBO, instWorlds, pcisph.numDrawParticles* sizeof(glm::mat4));
+        __mapBuffer(instVelVBO, instVel, pcisph.numDrawParticles* sizeof(glm::vec3));
 
         ////////////render 
         particleShader->use();
@@ -117,6 +122,7 @@ int main(){
 
     //global
     delete[] instWorlds;
+    delete[] instVel;
     delete[] instDen;
 
     // local 
@@ -178,7 +184,7 @@ void initialStateLog() {
     system("PAUSE");
 }
 
-std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
+std::tuple < Shader*, Model*, unsigned int, unsigned int, unsigned int > renderInitialize() {
 
     Shader* particleShader = new Shader("resources/shader/paricleL_vs.txt", "resources/shader/paricleL_fs.txt");
     Model* sphere = new Model("resources/objects/sphere.obj");
@@ -208,6 +214,7 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
         glBindBuffer(GL_ARRAY_BUFFER, instVBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * pcisph.numDrawParticles, &instWorlds[0][0], GL_DYNAMIC_DRAW);
 
+        // 4*4 matrix∏¶ vertex shader 3~6ø° ≥—∞‹¡‹
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
         glEnableVertexAttribArray(4);
@@ -227,18 +234,25 @@ std::tuple < Shader*, Model*, unsigned int, unsigned int > renderInitialize() {
         glBindBuffer(GL_ARRAY_BUFFER, instDenVBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(float) * pcisph.numDrawParticles, &instDen[0], GL_DYNAMIC_DRAW);
 
-
-
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
-
         glVertexAttribDivisor(2, 1);
+
+
+        glGenBuffers(1, &instVelVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, instVelVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * pcisph.numDrawParticles, &instVel[0][0], GL_DYNAMIC_DRAW);
+
+        glEnableVertexAttribArray(7);
+        glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+        glVertexAttribDivisor(7, 1);
+
 
 
         glBindVertexArray(0);
     }
 
-    return { particleShader,sphere,instVBO,instDenVBO };
+    return { particleShader,sphere,instVBO,instDenVBO,instVelVBO };
 }
 void instanceMat() {
 
@@ -246,29 +260,41 @@ void instanceMat() {
     const float rad = pcisph.radius ;
 
     if (pcisph.drawWall) {
+#pragma omp parallel for
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
 
             instDen[idx] = pcisph.fluidParticles.density[i];
 
+            instVel[idx] = pcisph.fluidParticles.vel[i];
+
             idx++;
         }
+#pragma omp parallel for
         for (unsigned int i = 0; i < pcisph.numWallParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.wallParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
 
             instDen[idx] = pcisph.wallParticles.density[i];
+            
+            instVel[idx] = glm::vec3(0.0f);
 
             idx++;
         }
     }
     else {
+#pragma omp parallel for
         for (unsigned int i = 0; i < pcisph.numFluidParticles; i++) {
             instWorlds[idx] = glm::translate(glm::mat4(1.0f), pcisph.fluidParticles.pos[i]);
             instWorlds[idx] = glm::scale(instWorlds[idx], glm::vec3(rad));
 
             instDen[idx] = pcisph.fluidParticles.density[i];
+            
+            instVel[idx] = pcisph.fluidParticles.vel[i];
+
+            
+            //printf("%f\n", instVel[idx][0] * instVel[idx][0] + instVel[idx][1] * instVel[idx][1] + instVel[idx][2] * instVel[idx][2]);
 
             idx++;
 

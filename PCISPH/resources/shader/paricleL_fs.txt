@@ -7,23 +7,12 @@ in vec3 Normal;
 in vec3 LightPos;
 in float height;
 in float density;
+in float velMag;
 
 
 void main(){
 
-	vec3 objectColor = vec3(0.4, 0.4 ,1);
-
-	if(height>5.0f){
-		objectColor = vec3(0.4, 0.4,0.8);
-	}
-	if(height>1.0f){
-		objectColor = vec3(0.3, 0.3,0.6);
-	}
-
-	if(density>562.313f - 0.001f && density<562.313f + 0.001f ){
-		objectColor = vec3(1.0,0.0,0.0);
-	}
-
+	vec3 objectColor = vec3(0.2f + velMag, 0.2f + velMag ,1.0f);
 
 	float ambientStrength = 0.1;
     	vec3 ambient = ambientStrength * vec3(1,1,1);
